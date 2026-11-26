@@ -115,7 +115,7 @@ CHECKS: tuple[Check, ...] = (
     Check("T    Unit tests", ("T",), False, _pytest),
     Check("N    Negative fixtures", ("N",), False, _negative),
     Check("A6   Dependency audit", ("A6",), False, _audit),
-    Check("E6   Lockfile drift", ("E6",), False, _lock_check),
+    Check("L    Lockfile current", ("L",), False, _lock_check),
 )
 
 
