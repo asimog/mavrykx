@@ -1,0 +1,14 @@
+{
+  "name": "euro-office-pg-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PostgreSQL task queue and pub/sub adapter for the Euro-Office server",
+  "main": "taskqueuePostgres.js",
+  "scripts": {
+    "test": "node test/smoke.js"
+  },
+  "dependencies": {
+    "config": "3.3.12",
+    "pg": "8.14.0"
+  }
+}
