@@ -32,12 +32,14 @@ The lockfile is the evidence. A prose version that disagrees with the lock is a 
 |---|---|---|
 | `docs/v1/` as the five-document design set | **Keep** | One owner per truth |
 | `AGENTS.md` laws | **Keep**, as rationale | Not enforcement; points at checks |
-| Spec Kit under `.specify/` | **Keep** | Scaffolding; never design authority |
 | SQL appendix + RLS negative test | **Keep and extend** | Proven isolation; becomes a CI job |
 | Table-ownership rule | **Extend** | Becomes `tools/ownership.py` |
 | Layering rules in `01` §6 | **Extend** | Become import-linter and dependency-cruiser contracts |
 | “Prose does not enforce” | **Replace with checks** | This audit |
 | Hand-written architecture review | **Keep** | Human judgement, not a gate |
+
+There is no Spec Kit pipeline. The repository uses the Matt Pocock flow and GitHub Issues for specs,
+tickets and implementation; there is no `specs/` tree.
 
 There are no lint, type, test or CI configurations yet. Nothing exists to retain beyond the design
 documents and the SQL appendix.

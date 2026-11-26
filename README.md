@@ -1,6 +1,6 @@
 # MavrykX
 
-**Architecture.** No application code yet. **MavrykX** is the platform; **Maverick** is the one agent.
+**Architecture and early implementation.** No product application code yet; the first code is the Euro-Office PostgreSQL adapter under [`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md). **MavrykX** is the platform; **Maverick** is the one agent.
 
 Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 
@@ -13,5 +13,12 @@ Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 | [Product experience](docs/v1/05-product-experience.md) | Navigation, Today, Matter workspace, classification setup, documents, browser, Research Studio, library, workflows, inbox, onboarding |
 
 The SQL appendix remains at [docs/v1/schema/0001_core.sql](docs/v1/schema/0001_core.sql); it is not a sixth document.
+
+Implementation plans:
+
+- [Repository scaffold](docs/implementation/repo-scaffold.md)
+- [Enforcement audit](docs/implementation/enforcement-audit-plan.md)
+- [Euro-Office integration](docs/implementation/eurooffice-integration-plan.md)
+- [Euro-Office runtime analysis](docs/implementation/euro-office-runtime.md)
 
 **The whole system is the scope.** Do not build until the gate conditions in the architecture doc pass.
