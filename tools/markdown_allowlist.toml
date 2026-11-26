@@ -1,0 +1,51 @@
+[[file]]
+path = "AGENTS.md"
+reason = "The operating brief: working rules, fixed choices and laws for design content."
+
+[[file]]
+path = "README.md"
+reason = "The repository entry point and document index."
+
+[[file]]
+path = "docs/agents/domain.md"
+reason = "Consumer rules for the domain-modeling skill."
+
+[[file]]
+path = "docs/agents/issue-tracker.md"
+reason = "Issue-tracker operations for this repository."
+
+[[file]]
+path = "docs/implementation/enforcement-audit-plan.md"
+reason = "The approved enforcement plan: rules, checks and negative tests."
+
+[[file]]
+path = "docs/implementation/euro-office-runtime.md"
+reason = "The approved Euro-Office package reduction and licence findings."
+
+[[file]]
+path = "docs/implementation/eurooffice-integration-plan.md"
+reason = "The approved editor integration plan."
+
+[[file]]
+path = "docs/implementation/repo-scaffold.md"
+reason = "The approved repository shape, pins and build order."
+
+[[file]]
+path = "docs/v1/01-architecture.md"
+reason = "Design authority: system shape, stack, deployment and acceptance."
+
+[[file]]
+path = "docs/v1/02-domain-model.md"
+reason = "Design authority: definitions, entities, lifecycles and invariants."
+
+[[file]]
+path = "docs/v1/03-application-agent-and-data.md"
+reason = "Design authority: services, agent, data, documents, security and audit."
+
+[[file]]
+path = "docs/v1/04-shared-workspaces-and-collaboration.md"
+reason = "Design authority: the Matter workspace, access and live editing."
+
+[[file]]
+path = "docs/v1/05-product-experience.md"
+reason = "Design authority: navigation, Matter workspace and product surfaces."

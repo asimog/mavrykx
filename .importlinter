@@ -1,0 +1,55 @@
+[importlinter]
+root_package = mavrykx
+include_external_packages = True
+
+[importlinter:contract:domain-pure]
+name = B1a domain imports nothing outside the domain
+type = forbidden
+source_modules =
+    mavrykx.domain
+forbidden_modules =
+    sqlalchemy
+    fastapi
+    pydantic_ai
+    pydantic_ai_harness
+    asyncpg
+    alembic
+    typer
+    structlog
+
+[importlinter:contract:application-isolation]
+name = B1b application does not import a surface or an adapter
+type = forbidden
+source_modules =
+    mavrykx.application
+forbidden_modules =
+    mavrykx.infrastructure
+    mavrykx.interfaces
+    mavrykx.agent
+    mavrykx.composition
+    mavrykx.root
+
+[importlinter:contract:agent-no-repository]
+name = B1c the agent never imports infrastructure
+type = forbidden
+source_modules =
+    mavrykx.agent
+forbidden_modules =
+    mavrykx.infrastructure
+
+[importlinter:contract:layers]
+name = B1d layer order
+type = layers
+layers =
+    mavrykx.root
+    mavrykx.composition
+    mavrykx.agent
+    mavrykx.interfaces | mavrykx.infrastructure
+    mavrykx.application
+    mavrykx.domain
+
+[importlinter:contract:no-cycles]
+name = B6 no import cycles
+type = acyclic_siblings
+ancestors =
+    mavrykx
