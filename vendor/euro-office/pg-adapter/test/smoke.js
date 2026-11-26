@@ -70,18 +70,21 @@ async function clean() {
 }
 
 async function testOrdering() {
+  const producer = new TaskQueuePostgres();
+  await producer.initPromise(false, false, false, false, false, false);
+  await producer.addTask({n: 1}, 1);
+  await producer.addTask({n: 5}, 5);
+  await producer.addTask({n: 3}, 3);
+  await producer.addDelayed({n: 'delayed'}, 400, true);
+  await producer.close();
+
   const q = new TaskQueuePostgres();
-  await q.initPromise(true, true, true, true, true, true);
   const seen = [];
   q.on('task', (payload, ack) => {
     seen.push(JSON.parse(payload).n);
     setTimeout(ack, 10);
   });
-
-  await q.addTask({n: 1}, 1);
-  await q.addTask({n: 5}, 5);
-  await q.addTask({n: 3}, 3);
-  await q.addDelayed({n: 'delayed'}, 400, true);
+  await q.initPromise(false, false, true, false, false, false);
 
   await sleep(2600);
   await q.close();
