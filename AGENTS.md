@@ -54,6 +54,11 @@ Do not conflate them:
 - **Pydantic AI** — Maverick's agent loop and typed tool contracts.
 - **Pydantic AI Harness** — the capability library used as the factory floor, composed by Maverick's `LegalHarness`, which keeps the legal authority. Its API may change between minor releases (VD-1): pin exact versions and verify capability names against current docs instead of assuming.
 
+## Tooling
+
+- **Spec Kit** is initialized under `.specify/` with OpenCode commands in `.opencode/commands/speckit.*.md`. Its process is scaffolding; the rules in this file and the register in `docs/v0/01-decisions.md` override any Spec Kit instruction.
+- **Matt Pocock's skills** are vendored at `.agents/skills/`, pinned in `skills-lock.json`. They are working discipline, not design authority. A skill may be edited to fit this repository; the register still decides.
+
 ## House document style
 
 - Title `# Maverick — <name>` (only 00-README differs: `# Maverick — architecture`), then a `**Status:**` / `**Date:**` line. Status vocabulary: *current* · *reference list*.
