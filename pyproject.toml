@@ -13,7 +13,7 @@ dependencies = [
     "pydantic==2.14.4",
     "pydantic-ai-harness[coder,codemode,dynamic-workflow,logfire,pgtask,skills]==0.75.0",
     "pydantic-settings==2.16.3",
-    "sqlalchemy==2.1.9",
+    "sqlalchemy[asyncio]==2.1.9",
     "structlog==26.1.0",
     "typer==0.29.3",
 ]
@@ -38,15 +38,18 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-src = ["src", "modules", "tools", "tests"]
+src = ["src", "modules", "tools", "tests", "migrations"]
 extend-exclude = ["tests/negative", "vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ARG", "PTH", "TRY", "BLE", "RUF", "S"]
 ignore = ["TRY003"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["mavrykx", "modules", "tools", "migrations", "tests"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S404", "S603", "S607"]
 "tools/**" = ["S404", "S603", "S607"]
 
 [tool.mypy]
@@ -54,12 +57,17 @@ python_version = "3.14"
 strict = true
 warn_unreachable = true
 disallow_any_explicit = true
-files = ["src", "modules", "tools"]
+files = ["src", "modules", "tools", "migrations"]
 mypy_path = "src"
 exclude = ["tests/negative"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-q"
 pythonpath = ["."]

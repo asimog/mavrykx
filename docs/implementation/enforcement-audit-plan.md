@@ -197,7 +197,8 @@ rule and the fix.
 | `tools/court_leak.py` | B7 | AST over domain/application + adapter allowlist |
 | `tools/contracts_drift.py` | E6 | generated files and their source hashes |
 | `tools/docs_agree.py` | E7 | pinned table vs `uv.lock`/`package-lock.json` |
-| `alembic check` | E8 | SQLAlchemy metadata vs migration head |
+| `tools/schema.py` | E8 | baseline digest, migration head and live RLS invariants |
+| `alembic check` | E8 | SQLAlchemy metadata vs migration head, from the first model |
 | `tools/negative.py` | all | fixtures under `tests/negative/` |
 
 No script may auto-delete or rewrite a document. A failure reports the path and the required action.

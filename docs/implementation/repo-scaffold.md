@@ -21,7 +21,7 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | Agent runtime | `pydantic-ai-slim` | derived | never declared directly |
 | Graph | `pydantic-graph` | derived | versioned with the runtime |
 | API | `fastapi` | `0.165.0` | |
-| DB | `sqlalchemy` | `2.1.9` | |
+| DB | `sqlalchemy[asyncio]` | `2.1.9` | async ORM and migrations |
 | DB driver | `asyncpg` | `0.32.0` | |
 | Migrations | `alembic` | `1.20.1` | baseline `0001_core.sql`; forward-only |
 | CLI | `typer` | `0.29.3` | |
@@ -205,6 +205,7 @@ python -m tools.verify --rule R2  # run one rule and its negative test
 | `comments.py` | AST-aware comment ban with the allowed exceptions |
 | `court_leak.py` | court names only in adapter data |
 | `contracts_drift.py` | generated contracts match their source |
+| `schema.py` | baseline digest, migration head and live RLS invariants |
 | `negative.py` | runs the fixtures that must fail |
 
 CI runs `--full` on every pull request. Hooks are a convenience; they are never the gate.

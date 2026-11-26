@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import comments, markdown_policy, negative
+from tools import comments, markdown_policy, negative, schema
 from tools.errors import ToolMissing
 from tools.findings import Finding, render_all
 
@@ -103,6 +103,10 @@ def _lock_check() -> tuple[bool, str]:
     return _command([uv, "lock", "--check"])
 
 
+def _schema() -> tuple[bool, str]:
+    return _from_findings(schema.check())
+
+
 CHECKS: tuple[Check, ...] = (
     Check("C1-C3 Markdown policy", ("C1", "C2", "C3"), True, _markdown),
     Check("A3   Comment policy", ("A3",), True, _comments),
@@ -116,6 +120,7 @@ CHECKS: tuple[Check, ...] = (
     Check("N    Negative fixtures", ("N",), False, _negative),
     Check("A6   Dependency audit", ("A6",), False, _audit),
     Check("L    Lockfile current", ("L",), False, _lock_check),
+    Check("E8   Schema drift", ("E8",), False, _schema),
 )
 
 
