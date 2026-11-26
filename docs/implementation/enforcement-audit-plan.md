@@ -1,8 +1,8 @@
 # MavrykX — Engineering enforcement audit
 
-**Status:** proposal · **Version:** 1 · **Date:** 2026-11-26
+**Status:** approved · **Version:** 1 · **Date:** 2026-11-26
 
-Plan only. No implementation until this document is approved.
+Approved. Every rule is a check with a negative fixture; prose is not the gate.
 
 The objective is a small, repository-level framework that makes recurring agent mistakes hard to
 introduce and easy to detect. Enforcement is executable: lint, types, architecture checks and tests.

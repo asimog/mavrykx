@@ -1,6 +1,9 @@
 # MavrykX
 
-**Architecture and early implementation.** No product application code yet; the first code is the Euro-Office PostgreSQL adapter under [`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md). **MavrykX** is the platform; **Maverick** is the one agent.
+**Architecture and the verification spine.** MavrykX is the platform; **Maverick** is the one agent.
+The design set is `docs/v1/`; the scaffold and its checks exist; no product module does yet. The first
+code remains the Euro-Office PostgreSQL adapter under
+[`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md).
 
 Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 
@@ -20,5 +23,18 @@ Implementation plans:
 - [Enforcement audit](docs/implementation/enforcement-audit-plan.md)
 - [Euro-Office integration](docs/implementation/eurooffice-integration-plan.md)
 - [Euro-Office runtime analysis](docs/implementation/euro-office-runtime.md)
+
+## Working in the repository
+
+```bash
+uv sync
+npm ci
+uv run python -m tools.verify --fast
+uv run python -m tools.verify --full
+```
+
+`--fast` is the edit loop. `--full` adds tests, the negative suite, dependency audits and lockfile
+drift, and is what CI runs. Python 3.14 and `uv` 0.13.10 are required; Node is pinned to 26.13.1 in
+`.node-version`.
 
 **The whole system is the scope.** Do not build until the gate conditions in the architecture doc pass.

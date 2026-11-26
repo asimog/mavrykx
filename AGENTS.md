@@ -3,8 +3,7 @@
 **This repository holds the V1 design and the first implementation work for MavrykX** — a self-hosted
 legal-work platform whose one agent is **Maverick**. The design set is `docs/v1/`; implementation
 plans are `docs/implementation/`; the first code is the Euro-Office PostgreSQL adapter under
-`vendor/euro-office/`. There is no application build, CI or test suite yet beyond that adapter's
-smoke test.
+`vendor/euro-office/`. The scaffold and its verification spine exist; there is no product module yet.
 
 The design is not a claim that the product exists.
 
@@ -119,8 +118,8 @@ The full pinned table is in [`docs/implementation/repo-scaffold.md`](docs/implem
 
 - There is no second spec pipeline. Matt Pocock's flow and GitHub Issues are the only process for specs, tickets and implementation.
 - Matt Pocock's skills are vendored at `.agents/skills/`, pinned in `skills-lock.json`. They are working discipline, not design authority.
-- The enforcement plan defines one command, `python -m tools.verify`, with fast and full modes. Hooks are convenience; CI is the gate. Until it exists, the adapter's `node test/smoke.js` is the only executable check.
-- Application code starts only after the enforcement plan is approved and the scaffold exists. The first code is the adapter; do not expand it into application modules.
+- One command is the gate: `python -m tools.verify --fast` for the edit loop, `--full` in CI. Hooks are convenience. The adapter's `node test/smoke.js` still proves the queue.
+- The enforcement plan is approved and the scaffold exists. Application code starts with the first module after the spine is green; do not expand the adapter into application modules.
 
 ## Agent skills
 

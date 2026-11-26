@@ -1,6 +1,6 @@
 # MavrykX — repository scaffold
 
-**Status:** proposal · **Version:** 1 · **Date:** 2026-11-26
+**Status:** approved · **Version:** 1 · **Date:** 2026-11-26
 
 The shape of the repository once code exists. It is a plan, not an implementation; no application
 code is created by this document.
@@ -52,6 +52,8 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | CSS | Tailwind CSS | `4.3.5` | |
 | CSS build | `@tailwindcss/vite` | `4.3.5` | Vite plugin |
 | Lint (TS) | `eslint` / `typescript-eslint` / `eslint-plugin-import-x` | `10.15.0` / `8.74.0` / `4.18.1` | type-aware rules |
+| Lint (TS) | `@eslint/js` / `globals` | `10.0.1` / `17.14.0` | flat-config base rules and environment globals |
+| Lint (TS) | `eslint-import-resolver-node` | `0.4.0` | resolver for `import-x/no-cycle` |
 | Unit tests (TS) | `vitest` / `@testing-library/react` | `5.1.2` / `16.3.3` | |
 | E2E | `@playwright/test` | `1.65.1` | Electron |
 | Packaging | `electron-builder` | `26.18.0` | |
@@ -162,6 +164,23 @@ writes; `lxml` reads the OOXML package for verification. The editor API is not a
 
 Public per module: `api.py`, `contracts.py`, `service.py`. Everything else is private. The
 table-ownership manifest names one owner per table.
+
+### Design check
+
+The shape is judged by Ousterhout's *A Philosophy of Software Design*:
+
+- **Deep modules.** `tools/verify.py` is one command over many checks; a caller never learns the
+  tool set. A module exposes `api.py`, `contracts.py`, `service.py` and hides models, repositories
+  and internals.
+- **Information hiding.** The domain does not know SQLAlchemy, FastAPI, Pydantic AI or the
+  filesystem. Each boundary converts once; no layer leaks its representation through another.
+- **No shallow modules.** An interface is an adapter, not a pass-through. A wrapper that only
+  renames its callee is deleted and the caller calls the service.
+- **Errors out of existence.** Unknown is `Unresolved`; an unverified rule is `unconfirmed`; a
+  missing tool is a named failure with its fix, not a traceback. Invalid states are unrepresentable
+  where the type system can express the difference.
+- **Docstrings, not routine comments.** A docstring states the abstraction a module hides; a
+  routine `#` or `//` comment is a failed rename and fails A3.
 
 ---
 
