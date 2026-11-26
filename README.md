@@ -33,8 +33,21 @@ uv run python -m tools.verify --fast
 uv run python -m tools.verify --full
 ```
 
-`--fast` is the edit loop. `--full` adds tests, the negative suite, dependency audits and lockfile
-drift, and is what CI runs. Python 3.14 and `uv` 0.13.10 are required; Node is pinned to 26.13.1 in
-`.node-version`.
+`--fast` is the edit loop. `--full` adds tests, the negative suite, dependency audits, lockfile drift,
+the schema checks and the RLS probes, and is what CI runs. Python 3.14 and `uv` 0.13.10 are required;
+Node is pinned to 26.13.1 in `.node-version`.
+
+`--full` needs a disposable PostgreSQL 17.12 database with pgvector:
+
+```bash
+docker run --rm -d --name mavrykx-pg -p 55433:5432 \
+  -e POSTGRES_USER=maverick_owner -e POSTGRES_PASSWORD=maverick -e POSTGRES_DB=mavrykx \
+  pgvector/pgvector:pg17
+export MAVRYKX_DATABASE_URL=postgresql+asyncpg://maverick_owner:maverick@127.0.0.1:55433/mavrykx
+uv run alembic upgrade head
+```
+
+The integration test drops and recreates the `app`, `audit`, `ref` and `ops` schemas; point it only at
+a disposable database.
 
 **The whole system is the scope.** Do not build until the gate conditions in the architecture doc pass.
