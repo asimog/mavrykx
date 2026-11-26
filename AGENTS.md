@@ -82,6 +82,16 @@ Pydantic AI names: **tool** is one callable; **Harness capability** is a Pydanti
 - Spec Kit is initialized under `.specify/` with OpenCode commands in `.opencode/commands/speckit.*.md`. Its process is scaffolding; this file and the five docs override any Spec Kit instruction.
 - Matt Pocock's skills are vendored at `.agents/skills/`, pinned in `skills-lock.json`. They are working discipline, not design authority.
 
+## Agent skills
+
+### Issue tracker
+
+Issues, specs and decision tickets live in GitHub Issues on `asimog/mavrykx`. Solo repo, no triage vocabulary. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context, but vocabulary lives in `AGENTS.md` § Domain vocabulary and `docs/v1/02-domain-model.md`; there is no `GLOSSARY.md` or `docs/adr/`. See `docs/agents/domain.md`.
+
 ## House document style
 
 - Title `# MavrykX — <name>` (the architecture doc is `# MavrykX — Detailed architecture`), then a `**Status:**` / `**Version:**` / `**Date:**` line.
