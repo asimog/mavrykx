@@ -26,11 +26,14 @@ The platform is a modular monolith with a firm server, Electron clients and auth
 
 ## 2. Deployment shapes
 
-- **Solo.** One local Python process runs `api` + `worker`. Bundled PostgreSQL. Electron on the same machine. Vendored editor and builder; no DocumentServer.
-- **Firm LAN.** Firm server runs the Python roles and the Euro-Office DocumentServer. PostgreSQL, blobs and editor session stores on the firm server. Electron on each desk.
+Installed and running are different facts. Every client installs the local editor and the server pack; only the local editor runs by default.
+
+- **Local.** One local Python process runs `api` + `worker`. Bundled PostgreSQL. Electron on the same machine. The Euro-Office frontend and `x2t` are installed; no `DocService` process runs.
+- **Shared session.** Any client can host: when a workspace is shared, that client starts `DocService`, `FileConverter` and the PostgreSQL queue, and peers connect over the LAN. The firm server can host instead. The host is the shared-session authority while the session lasts.
+- **Firm LAN.** Firm server runs the Python roles and may run the shared-session service. PostgreSQL, blobs and editor session stores on the firm server. Electron on each desk.
 - **Firm remote.** Same firm server behind the remote connection service. No legal data at the relay.
 
-The solo packaging gate is under 15 minutes and under 1.5 GB. The firm profile is a separately measured appliance; it may include the DocumentServer, Redis, RabbitMQ and editor SQL as **editor-session infrastructure**, never as legal stores.
+The default installer is the shared-capable app: under 15 minutes and under 3.5 GB installed. A local-only build without the server pack stays under 1.5 GB. Redis is not used; the queue is PostgreSQL. Editor session stores are editor-session infrastructure, never legal stores.
 
 ---
 
@@ -56,9 +59,9 @@ flowchart TB
     Q["Postgres job queue<br/>leases, heartbeats"]
   end
 
-  subgraph Editor["Euro-Office DocumentServer — firm profile"]
+  subgraph Editor["Euro-Office shared session — firm server or sharing client"]
     DS["DocService + FileConverter"]
-    ES[("Redis / RabbitMQ / editor SQL")]
+    ES[("Editor session stores")]
   end
 
   subgraph Data["Firm-controlled records"]
@@ -87,7 +90,7 @@ flowchart TB
 ```
 
 - **Record plane:** PostgreSQL with RLS, blobs, application services, one gateway, approvals and audit.
-- **Editing plane:** Euro-Office DocumentServer for human–human live editing; the builder for agent/offline DOCX work; MavrykX owns identity, versions, permissions, approvals and audit.
+- **Editing plane:** Euro-Office DocumentServer for shared live sessions, hosted by the firm server or the sharing client; the builder for agent/offline DOCX work; MavrykX owns identity, versions, permissions, approvals and audit.
 - **Execution plane:** stateless Maverick runs on a node. Every tool call crosses the live session to the gateway. The node has no local authority.
 
 **The editor is not the record.** It gets no database credential and no version-creation path. It fetches a committed base by short-lived URL and returns saved bytes by callback.
@@ -126,7 +129,8 @@ This layer works with notes alone. It does not classify, research, draft or run 
 - `research_studio` — multi-agent research projects and plans.
 - `library` — firm templates, precedents, checklists and know-how; admin publishes, admin grants.
 - `facts` — facts, evidence, positions, statuses, exhibits, evidence notebook.
-- `drafting` — render jobs; reads library templates.
+- `analysis` — issues, arguments and argument authorities.
+- `drafting` — render jobs; reads library templates. Owns no table.
 - `verification` — citation, quote, pinpoint, format, cross-reference and completion checks.
 - `approvals` — approval, gate, decision.
 
@@ -159,18 +163,21 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 - Python **3.14.10** target; Pydantic AI floor **3.11**. 3.14 is chosen for the Harness wheel and dependency set; 3.15 is not targeted.
 - Pydantic **2.14.4**.
-- Pydantic AI **2.75.0**.
-- Pydantic AI Harness **0.75.0**.
-- pydantic-graph **2.75.0**.
+- pydantic-settings **2.16.3** for typed configuration.
+- Pydantic AI Harness **0.75.0**, pinned exactly. It requires `pydantic-ai-slim` **2.75.0**; `pydantic-ai` and `pydantic-graph` are not pinned separately. Provider extras are added to `pydantic-ai-slim`.
 - FastAPI **0.165.0**.
-- SQLAlchemy **2.1.9**; asyncpg **0.32.0**.
+- SQLAlchemy **2.1.9**; asyncpg **0.32.0**; Alembic **1.20.1**.
 - Typer **0.29.3**.
 - ag-ui-protocol **1.0.0**.
-- OpenTelemetry **1.45.2**; structlog **26.1.0**.
-- pytest **9.2.0**; pytest-asyncio **1.5.0**; httpx **0.28.1**.
-- ruff **0.17.6**; mypy **2.4.1**; uv **0.13.10**.
+- `lxml` **6.1.3** reads OOXML for verification; `python-docx` **1.2.0** is optional for simple extraction; `pypdf` **7.2.0** extracts PDF text; the builder is the only writer.
+- OCR is local: `ocrmypdf` **17.14.2** for PDFs, `pytesseract` **0.3.13** for images, Tesseract 5.x with English and Indic language data pinned with the installer.
+- `argon2-cffi` **25.1.0** for passwords; `pyotp` **2.12.1** for TOTP; `aiosmtplib` **5.1.3** and `imap-tools` **1.16.0** for email, deferred.
+- OpenTelemetry **1.45.2**; structlog **26.1.0**; `logfire` **6.0.1** optional and development-only.
+- pytest **9.2.0**; pytest-asyncio **1.5.0**; hypothesis **6.170.17**; pytest-cov **7.1.0**; httpx **0.29.0**.
+- ruff **0.17.6** (including the `S` security rules); mypy **2.4.1**; import-linter **2.17**; pip-audit **2.10.1**; uv **0.13.10**; `just` pinned in CI.
+- `python-multipart` **0.0.34** for uploads; `itsdangerous` **2.2.0** for signed URLs; `cryptography` **50.0.2** for device keys.
 - DBOS **3.7.0** optional behind `ExecutionEngine`.
-- No Alembic. Schema evolution is numbered forward-only SQL.
+- Alembic is the migration runner; revisions are numbered and forward-only, and `downgrade` is not implemented. The baseline revision executes `0001_core.sql`. `alembic check` fails CI on drift between the models and the migrations.
 
 ### Data
 
@@ -182,17 +189,22 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 - React / React DOM **19.3.1**.
 - TanStack Router **1.170.46**; TanStack Query **5.108.4**.
-- Electron **45.5.0**.
-- Vite **8.4.0**; TypeScript **7.0.2**.
+- Electron **45.5.0** (Chromium **156.0.8078.109**, Node **24.22.3**). The bundled Node is the native-module ABI; the build Node is not.
+- Vite **8.4.0**; TypeScript **6.0.3**, not 7.0.2: `typescript-eslint` 8.74 supports `<6.1.0`; pin 6.0.3 until the lint toolchain supports 7.
 - Tailwind CSS **4.3.5**; `@vitejs/plugin-react` **6.3.0**.
 - `@ag-ui/client` **1.0.5**.
+- Zustand **5.1.0** for UI and session state; TanStack Query owns server state.
+- `openapi-typescript` **7.13.0** and `openapi-fetch` **0.17.0** generate and call the API client.
+- `ajv` **8.20.0** validates generated JSON Schema in the renderer; `react-hook-form` **7.92.0** handles forms.
+- `@tailwindcss/vite` **4.3.5**; `eslint` **10.15.0**; `typescript-eslint` **8.74.0**; `eslint-plugin-import-x` **4.18.1**; `vitest` **5.1.2**; `@testing-library/react` **16.3.3**; `@playwright/test` **1.65.1**; `electron-builder` **26.18.0**; `dependency-cruiser` **18.9.0**.
+- `electron-vite` **6.0.0**; `@tanstack/router-plugin` **1.169.0**; `@types/node` **24.19.4** (matches Electron's Node 24.22.3); `@types/react` **19.3.3**; `@types/react-dom` **19.3.0**.
 - Node **26.13.1** development/build only.
 
 ### Editor
 
-- Euro-Office DocumentServer **9.3.8** for the firm profile.
+- Euro-Office DocumentServer **9.3.8** for shared sessions, whether hosted by the firm server or a sharing client.
 - Docs API is the live integration. WOPI is a file-access/locking fallback; it loses plugins, JWT restriction, toolbar control and paragraph-locking.
-- The solo profile uses the vendored editor and builder; no DocumentServer.
+- The local profile uses the vendored editor and builder; the server pack is installed, but no DocumentServer process runs until a workspace is shared.
 
 ---
 
@@ -252,12 +264,12 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 ## 7. Editor and document authority
 
-- Human–human co-editing uses the Euro-Office DocumentServer in the firm profile.
+- Human–human co-editing uses the Euro-Office DocumentServer in a shared session; the host may be the firm server or the sharing client.
 - Docs API is the live path; WOPI is a constrained fallback.
 - One active `editing_session` per document. It fences out-of-session commits with `DOC_SESSION_ACTIVE`.
 - Agents submit base-bound `document_proposal` rows; they do not join a live session.
 - The session save creates an immutable `document_version`. A checkpoint is derived; a crash can promote the last checkpoint to an unapproved `editor_recovery` version.
-- The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only.
+- The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only. Reading for verification goes to the OOXML package directly (`lxml`), not through the editor API; the editor API is for rendering and editing, not a server-side parser.
 - The editor gets no database credential; the host owns identity, versions, permissions, approvals and audit.
 
 ---
@@ -277,7 +289,7 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 This is engineering sequence, not product releases.
 
-1. **Hard gates.** Solo install time/size; DOCX tracked-change round trip; two-user live co-editing spike; firm-profile measurement; licence review; RLS negative tests; AG-UI interrupt; V1 schema/resource-grant delta; dependency checks; migration runner; scripted-model layer.
+1. **Hard gates.** Install time/size (3.5 GB shared-capable, 1.5 GB local-only); DOCX tracked-change round trip; two-user peer-hosted co-editing spike; shared-host measurement; licence review; RLS negative tests; AG-UI interrupt; V1 schema/resource-grant delta; dependency checks; migration runner; scripted-model layer.
 2. **Solo loop.** One Delhi High Court civil Matter: notes-first, proceeding, documents with anchors, facts, one verified rule set, drafting, verification, completion contract, hash-bound approval, filing record. Classification and forum adapters are not required here.
 3. **Firm and legal intelligence.** Grants/walls; shared conversations; live sessions; classification; corpus; case law; library; Research Studio; forum adapters; browser; Pydantic Graph workflow creator; portal browser with download guards.
 4. **Remote and resilience.** VPN guide; backups and restore drills; node leases and revocation; durable engine only if the crash test fails.
@@ -311,6 +323,6 @@ This is engineering sequence, not product releases.
 - External counsel guest accounts.
 - Firm-scoped Research Studio.
 
-No architecture-level open decisions remain. Forum adapter protocol, source list, sync cadence, browser handoff, licensing, library audience, Research Studio scope, workflow spec format, audit retention and source ownership are implementation-spec decisions; they do not reopen the architecture.
+No architecture-level open decisions remain. Implementation details — forum adapter protocol, source list, sync cadence, browser handoff, licensing, workflow spec format, source ownership — are recorded in `docs/implementation/` and the owning module; they do not reopen the architecture.
 
 The domain model is in [02-domain-model.md](02-domain-model.md). Application, agent and data are in [03-application-agent-and-data.md](03-application-agent-and-data.md). Shared collaboration is in [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md). The product surface is in [05-product-experience.md](05-product-experience.md).

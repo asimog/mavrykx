@@ -195,7 +195,6 @@ A Matter is complete without litigation management or legal intelligence.
 - `run_bundle` — bundle versions selected. Owner: harness.
 - `browser_session` — user or headless agent session. Owner: browser.
 - `browser_control_lease` — explicit, revocable agent control of the user browser. Owner: browser.
-- `browser_control_lease` — explicit agent control of the user browser. Owner: browser.
 
 ### Approvals, verification and audit
 

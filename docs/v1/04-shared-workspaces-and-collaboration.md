@@ -66,7 +66,7 @@ The service checks it; RLS re-checks it. The UI is not the boundary.
 
 ## 4. Live document editing
 
-Human–human co-editing uses the Euro-Office DocumentServer in the firm profile. The editor owns the live session and pixels; MavrykX owns identity, versions, permissions, approvals and audit.
+Human–human co-editing uses the Euro-Office DocumentServer in a shared session, hosted by the firm server or the sharing client. The editor owns the live session and pixels; MavrykX owns identity, versions, permissions, approvals and audit.
 
 - The session opens from a committed base version. `editing_session.id` is the Docs API key.
 - One active session per document.
@@ -210,4 +210,4 @@ sequenceDiagram
 
 ---
 
-Editor plugin scope, DocumentServer packaging, checkpoint frequency, browser control details, Research Studio scope and trace retention are settled in the implementation spec.
+Editor plugin scope, DocumentServer packaging, checkpoint frequency, browser control details, Research Studio scope and trace retention are recorded in `docs/implementation/eurooffice-integration-plan.md` and the owning module; they do not reopen the architecture.

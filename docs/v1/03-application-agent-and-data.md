@@ -203,9 +203,19 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Tracked changes by agents use `w:ins`/`w:del` authored `maverick:agent:<run_id>`; a human author is never swapped.
 - A version with pending changes is not approvable.
 
+### OCR
+
+- Local by default: `ocrmypdf` for searchable PDFs, `pytesseract` for images, Tesseract 5.x with English and Indic language data pinned with the installer.
+- A hosted engine sits behind the same `OcrEngine` port and is off unless a firm opts in.
+- OCR runs in the worker; derived text carries the source hash and a confidence, and never replaces the original.
+
+### Email
+
+- Deferred. When it becomes a record, `aiosmtplib` sends and `imap-tools` ingests; raw messages and attachments are blobs, metadata is a record.
+
 ### Live editing
 
-- Firm profile: Euro-Office DocumentServer. Docs API primary; WOPI fallback.
+- Shared session: Euro-Office DocumentServer, hosted by the firm server or the sharing client. Docs API primary; WOPI fallback. Local editing uses the vendored frontend in desktop mode and runs no server.
 - `editing_session.id` is the Docs API key; one active session per document.
 - Session fence refuses out-of-session commits.
 - Presence/cursors are editor state; not records.
@@ -241,7 +251,8 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 ## 10. Security
 
 - Local accounts + TOTP + server sessions + device keys; OIDC optional.
-- Argon2id passwords; breached-password check.
+- Argon2id passwords (`argon2-cffi`); TOTP (`pyotp`); breached-password check.
+- Sessions are opaque 256-bit tokens stored hashed in `session`; revocation deletes the row. JWTs are only for short-lived document URLs and DocService config.
 - Step-up auth for commit, filing-ready, send, grant, delete.
 - RBAC for firm functions; Matter grants; walls; resource grants.
 - Agent inherits the launching user, intersected with the bundle; no wider access.
