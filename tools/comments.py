@@ -40,9 +40,7 @@ TYPESCRIPT_DIRECTIVES = (
     "// Copyright",
     "/// <reference",
     "//# sourceMappingURL",
-    "/*!",
-    "/* @__PURE__",
-    "/*#__PURE__",
+    "/*!", "/* @__PURE__", "/*#__PURE__",
 )
 REGEX_PREDECESSORS = frozenset("(,=:[!&|?{};")
 
@@ -109,8 +107,7 @@ def _python_allowed(line: int, text: str) -> bool:
     return line <= 10 and ("Copyright" in stripped or "SPDX-License-Identifier" in stripped)
 
 
-def _typescript_allowed(line: int, text: str) -> bool:
-    del line
+def _typescript_allowed(_line: int, text: str) -> bool:
     stripped = text.strip()
     if stripped.startswith(TYPESCRIPT_DIRECTIVES):
         return True
@@ -123,7 +120,6 @@ def _typescript_comments(source: str) -> list[tuple[int, str]]:
     line = 1
     previous = ""
     length = len(source)
-
     while index < length:
         character = source[index]
         if character == "\n":
