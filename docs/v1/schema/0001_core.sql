@@ -1,15 +1,9 @@
--- Maverick core schema — the single baseline.
+-- MavrykX core schema - the single baseline.
 -- PostgreSQL 17+. Run as the migration role (maverick_owner).
--- Appendix to the domain model (docs/v0/02-domain-model.md). It is intentionally
--- not every entity: issue/argument, retrieval packets and time/billing are
--- designed in the model and built with their owning work. The domain model is
--- the source; if they conflict, fix this file.
---
--- Conventions:
---   * UUID keys, timestamptz, text + CHECK for stable sets.
---   * Every legal table carries matter_id and has RLS.
---   * Immutable tables reject UPDATE and DELETE.
---   * Derived data (text, anchors, chunks) is separate and rebuildable.
+-- Appendix to the domain model (docs/v1/02-domain-model.md). It is intentionally
+-- not every entity: issue/argument and time/billing are designed in the model
+-- and built with their owning work. The domain model is the source; if they
+-- conflict, fix this file.
 --
 -- Conventions:
 --   * UUID keys, timestamptz, text + CHECK for stable sets.
@@ -1179,6 +1173,455 @@ alter table app.session
   foreign key (device_id) references app.device(id);
 
 -- ---------------------------------------------------------------------------
+-- V1 additions: collaboration, classification, forum adapters, browser,
+-- corpus, case law, library, research studio and workflows.
+-- The Matter is the only shared boundary; there is no proceeding relation.
+-- ---------------------------------------------------------------------------
+
+alter table app.conversation
+  add column if not exists visibility text not null default 'private'
+    check (visibility in ('private','shared','matter'));
+
+alter table app.task
+  add column if not exists visibility text not null default 'matter'
+    check (visibility in ('matter','private'));
+
+alter table app.proceeding
+  add column if not exists impugned_order_id uuid references app."order"(id) on delete set null,
+  add column if not exists originating_proceeding_id uuid references app.proceeding(id) on delete set null,
+  add column if not exists jurisdiction_basis text,
+  add column if not exists governing_date date,
+  add column if not exists detail jsonb not null default '{}'::jsonb;
+
+alter table app.document_version
+  add column if not exists editing_session_id uuid;
+
+alter table app.document_version
+  drop constraint if exists document_version_source_check;
+alter table app.document_version
+  add constraint document_version_source_check check (source in
+    ('upload','agent_generated','editor_save','editor_recovery','import','template','export'));
+
+alter table app.agent_run
+  add column if not exists node_id uuid,
+  add column if not exists task_id uuid references app.task(id) on delete set null,
+  add column if not exists lease_id text,
+  add column if not exists lease_expires_at timestamptz,
+  add column if not exists heartbeat_at timestamptz,
+  add column if not exists attempt int not null default 1,
+  add column if not exists step_store_run_id text;
+
+alter table app.agent_run drop constraint if exists agent_run_depth_check;
+alter table app.agent_run add constraint agent_run_depth_check check (depth between 0 and 2);
+alter table app.agent_run drop constraint if exists agent_run_status_check;
+alter table app.agent_run add constraint agent_run_status_check check (status in
+  ('queued','scoped','running','waiting_approval','suspended','uncertain','completed','failed','cancelled'));
+
+alter table app.agent_event
+  add column if not exists operation_id text,
+  add column if not exists effect_status text
+    check (effect_status in ('started','completed','failed','unknown'));
+create unique index if not exists agent_event_operation
+  on app.agent_event (run_id, operation_id) where operation_id is not null;
+
+alter table app.context_package
+  add column if not exists run_id uuid references app.agent_run(id) on delete cascade;
+
+create table app.resource_grant (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid not null references app.matter(id) on delete cascade,
+  resource_type  text not null check (resource_type in ('document','conversation','task')),
+  resource_id    uuid not null,
+  subject_user_id uuid not null references app.user(id) on delete cascade,
+  level          text not null check (level in ('view','comment','edit','post')),
+  granted_by     uuid not null references app.user(id),
+  created_at     timestamptz not null default now(),
+  revoked_at     timestamptz,
+  unique (resource_type, resource_id, subject_user_id)
+);
+create index resource_grant_lookup on app.resource_grant
+  (resource_type, resource_id, subject_user_id) where revoked_at is null;
+
+create table app.message (
+  id              uuid primary key default gen_random_uuid(),
+  matter_id       uuid not null references app.matter(id) on delete cascade,
+  conversation_id uuid not null references app.conversation(id) on delete cascade,
+  seq             int not null,
+  author_type     text not null check (author_type in ('user','agent')),
+  author_user_id  uuid references app.user(id),
+  author_run_id   uuid references app.agent_run(id),
+  reply_to_id     uuid references app.message(id),
+  client_message_id text,
+  body            text not null,
+  created_at      timestamptz not null default now(),
+  unique (conversation_id, seq),
+  check ((author_type = 'user') = (author_user_id is not null)),
+  check ((author_type = 'agent') = (author_run_id is not null))
+);
+
+create table app.task_document (
+  id          uuid primary key default gen_random_uuid(),
+  matter_id   uuid not null references app.matter(id) on delete cascade,
+  task_id     uuid not null references app.task(id) on delete cascade,
+  document_id uuid not null references app.document(id) on delete cascade,
+  created_by  uuid not null references app.user(id),
+  created_at  timestamptz not null default now(),
+  unique (task_id, document_id)
+);
+
+create table app.editing_session (
+  id              uuid primary key default gen_random_uuid(),
+  matter_id       uuid not null references app.matter(id) on delete cascade,
+  document_id     uuid not null references app.document(id) on delete cascade,
+  base_version_id uuid not null references app.document_version(id),
+  provider_key    text not null unique,
+  provider        text not null default 'euro_office' check (provider in ('euro_office')),
+  status          text not null default 'opening' check (status in
+                    ('opening','active','closing','closed','failed','revoked')),
+  opened_by       uuid not null references app.user(id),
+  opened_at       timestamptz not null default now(),
+  last_heartbeat_at timestamptz,
+  closed_at       timestamptz,
+  result_version_id uuid references app.document_version(id),
+  checkpoint_sha256 text,
+  checkpoint_at   timestamptz,
+  failure_code    text
+);
+create unique index editing_session_active on app.editing_session (document_id)
+  where status in ('opening','active','closing');
+create index editing_session_document on app.editing_session (document_id, opened_at desc);
+
+alter table app.document_version
+  add constraint document_version_editing_session_fk
+  foreign key (editing_session_id) references app.editing_session(id) on delete set null;
+
+create table app.editing_session_participant (
+  session_id uuid not null references app.editing_session(id) on delete cascade,
+  user_id    uuid not null references app.user(id) on delete cascade,
+  matter_id  uuid not null references app.matter(id) on delete cascade,
+  joined_at  timestamptz not null default now(),
+  left_at    timestamptz,
+  role       text not null default 'editor' check (role in ('editor','viewer','reviewer')),
+  primary key (session_id, user_id)
+);
+
+create table app.document_proposal (
+  id              uuid primary key default gen_random_uuid(),
+  matter_id       uuid not null references app.matter(id) on delete cascade,
+  document_id     uuid not null references app.document(id) on delete cascade,
+  base_version_id uuid not null references app.document_version(id),
+  base_hash       text not null,
+  anchor_key      text,
+  expected_text_hash text,
+  operation       text not null check (operation in ('replace','insert','delete','comment')),
+  patch_sha256    text,
+  proposed_by_run_id uuid references app.agent_run(id),
+  proposed_by_user_id uuid references app.user(id),
+  status          text not null default 'proposed' check (status in
+                    ('proposed','rebased','applied','rejected','stale','needs_human','superseded')),
+  applied_version_id uuid references app.document_version(id),
+  reviewed_by     uuid references app.user(id),
+  reviewed_at     timestamptz,
+  idempotency_key text unique,
+  created_at      timestamptz not null default now()
+);
+create index document_proposal_document on app.document_proposal (document_id, status);
+
+create table app.execution_node (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid references app.user(id) on delete set null,
+  device_id      uuid references app.device(id) on delete set null,
+  kind           text not null check (kind in ('desktop','server_worker','shared')),
+  name           text not null,
+  capabilities   jsonb not null default '{}'::jsonb,
+  status         text not null default 'active' check (status in ('active','offline','revoked')),
+  last_heartbeat_at timestamptz,
+  registered_at  timestamptz not null default now(),
+  revoked_at     timestamptz
+);
+
+alter table app.agent_run
+  add constraint agent_run_node_fk
+  foreign key (node_id) references app.execution_node(id) on delete set null;
+
+create table app.notification (
+  id            uuid primary key default gen_random_uuid(),
+  matter_id     uuid references app.matter(id) on delete cascade,
+  recipient_user_id uuid not null references app.user(id) on delete cascade,
+  kind          text not null,
+  subject_type  text,
+  subject_id    uuid,
+  payload       jsonb not null default '{}'::jsonb,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+create index notification_recipient on app.notification (recipient_user_id, created_at desc);
+
+create table app.notification_delivery (
+  id             uuid primary key default gen_random_uuid(),
+  notification_id uuid not null references app.notification(id) on delete cascade,
+  matter_id      uuid references app.matter(id) on delete cascade,
+  channel        text not null,
+  destination    text,
+  status         text not null default 'pending' check (status in ('pending','sent','failed')),
+  attempts       int not null default 0,
+  next_attempt_at timestamptz,
+  sent_at        timestamptz
+);
+
+create table app.job (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid references app.matter(id) on delete cascade,
+  kind           text not null,
+  payload        jsonb not null default '{}'::jsonb,
+  status         text not null default 'queued' check (status in
+                    ('queued','running','done','failed','cancelled')),
+  attempts       int not null default 0,
+  run_at         timestamptz not null default now(),
+  locked_by      text,
+  locked_at      timestamptz,
+  lease_expires_at timestamptz,
+  idempotency_key text unique,
+  created_at     timestamptz not null default now()
+);
+create index job_ready on app.job (status, run_at) where status = 'queued';
+
+create table app.classification (
+  id              uuid primary key default gen_random_uuid(),
+  matter_id       uuid not null references app.matter(id) on delete cascade,
+  subject_type    text not null check (subject_type in ('matter','proceeding')),
+  subject_id      uuid not null,
+  schema_key      text not null,
+  schema_version  int not null default 1,
+  fields          jsonb not null default '{}'::jsonb,
+  evidence        jsonb not null default '{}'::jsonb,
+  status          text not null default 'proposed' check (status in
+                    ('proposed','confirmed','superseded','rejected')),
+  proposed_by_run_id uuid references app.agent_run(id),
+  confirmed_by    uuid references app.user(id),
+  confirmed_at    timestamptz,
+  created_at      timestamptz not null default now()
+);
+create unique index classification_confirmed on app.classification (subject_type, subject_id)
+  where status = 'confirmed';
+
+create table app.forum_adapter (
+  id             uuid primary key default gen_random_uuid(),
+  forum_id       uuid not null references app.forum(id) on delete cascade,
+  name           text not null,
+  kind           text not null,
+  capabilities   jsonb not null default '{}'::jsonb,
+  source_url     text,
+  status         text not null default 'active' check (status in ('active','disabled','failed')),
+  last_sync_at   timestamptz,
+  created_at     timestamptz not null default now(),
+  unique (forum_id, name)
+);
+
+create table app.browser_session (
+  id              uuid primary key default gen_random_uuid(),
+  matter_id       uuid not null references app.matter(id) on delete cascade,
+  user_id         uuid not null references app.user(id),
+  kind            text not null check (kind in ('user','agent')),
+  status          text not null default 'open' check (status in ('open','closed','revoked')),
+  controller_user_id uuid references app.user(id),
+  controller_run_id uuid references app.agent_run(id),
+  policy          jsonb not null default '{}'::jsonb,
+  opened_at       timestamptz not null default now(),
+  ended_at        timestamptz
+);
+
+create table app.browser_control_lease (
+  id          uuid primary key default gen_random_uuid(),
+  session_id  uuid not null references app.browser_session(id) on delete cascade,
+  matter_id   uuid not null references app.matter(id) on delete cascade,
+  holder_user_id uuid not null references app.user(id),
+  holder_run_id uuid references app.agent_run(id),
+  expires_at  timestamptz not null,
+  created_at  timestamptz not null default now()
+);
+create unique index browser_control_one on app.browser_control_lease (session_id);
+
+create table app.legal_instrument (
+  id             uuid primary key default gen_random_uuid(),
+  source_id      uuid not null references app.source(id),
+  kind           text not null check (kind in
+                    ('statute','court_rules','regulation','notification','practice_direction','manual','other')),
+  title          text not null,
+  jurisdiction   text,
+  forum_id       uuid references app.forum(id),
+  status         text not null default 'draft' check (status in ('draft','published','retired')),
+  created_at     timestamptz not null default now()
+);
+
+create table app.instrument_version (
+  id             uuid primary key default gen_random_uuid(),
+  instrument_id  uuid not null references app.legal_instrument(id) on delete cascade,
+  version_no     int not null,
+  effective_from date,
+  effective_to   date,
+  text_hash      text,
+  supersedes_id  uuid references app.instrument_version(id),
+  verified_by    uuid references app.user(id),
+  verified_at    timestamptz,
+  created_at     timestamptz not null default now(),
+  unique (instrument_id, version_no)
+);
+
+create table app.instrument_snapshot (
+  id             uuid primary key default gen_random_uuid(),
+  instrument_version_id uuid not null references app.instrument_version(id) on delete cascade,
+  content_sha256 text not null,
+  blob_sha256    text not null references app.blob(sha256),
+  fetched_at     timestamptz not null default now(),
+  diff_from_id   uuid references app.instrument_snapshot(id)
+);
+
+create table app.provision (
+  id             uuid primary key default gen_random_uuid(),
+  instrument_version_id uuid not null references app.instrument_version(id) on delete cascade,
+  provision_key  text not null,
+  heading        text,
+  text           text not null,
+  anchor         text,
+  unique (instrument_version_id, provision_key)
+);
+
+create table app.judgment (
+  id             uuid primary key default gen_random_uuid(),
+  source_id      uuid not null references app.source(id),
+  forum_id       uuid references app.forum(id),
+  case_number    text,
+  title          text not null,
+  decided_on     date,
+  status         text not null default 'draft' check (status in ('draft','published','retired')),
+  created_at     timestamptz not null default now()
+);
+
+create table app.judgment_version (
+  id             uuid primary key default gen_random_uuid(),
+  judgment_id    uuid not null references app.judgment(id) on delete cascade,
+  version_no     int not null,
+  text_hash      text,
+  treatment      text,
+  supersedes_id  uuid references app.judgment_version(id),
+  verified_by    uuid references app.user(id),
+  verified_at    timestamptz,
+  created_at     timestamptz not null default now(),
+  unique (judgment_id, version_no)
+);
+
+create table app.judgment_snapshot (
+  id             uuid primary key default gen_random_uuid(),
+  judgment_version_id uuid not null references app.judgment_version(id) on delete cascade,
+  content_sha256 text not null,
+  blob_sha256    text not null references app.blob(sha256),
+  fetched_at     timestamptz not null default now()
+);
+
+create table app.library_item (
+  id             uuid primary key default gen_random_uuid(),
+  kind           text not null check (kind in ('template','precedent','checklist','guidance')),
+  title          text not null,
+  owner_user_id  uuid references app.user(id),
+  status         text not null default 'draft' check (status in ('draft','published','retired')),
+  created_at     timestamptz not null default now()
+);
+
+create table app.library_version (
+  id             uuid primary key default gen_random_uuid(),
+  item_id        uuid not null references app.library_item(id) on delete cascade,
+  version_no     int not null,
+  content_hash   text,
+  blob_sha256    text references app.blob(sha256),
+  published_by   uuid references app.user(id),
+  published_at   timestamptz,
+  unique (item_id, version_no)
+);
+
+create table app.library_grant (
+  id             uuid primary key default gen_random_uuid(),
+  item_id        uuid not null references app.library_item(id) on delete cascade,
+  subject_user_id uuid references app.user(id) on delete cascade,
+  subject_role   text,
+  level          text not null default 'view' check (level in ('view','use')),
+  granted_by     uuid not null references app.user(id),
+  created_at     timestamptz not null default now(),
+  check ((subject_user_id is null) <> (subject_role is null))
+);
+
+create table app.research_project (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid not null references app.matter(id) on delete cascade,
+  title          text not null,
+  created_by     uuid not null references app.user(id),
+  status         text not null default 'open' check (status in ('open','closed','archived')),
+  created_at     timestamptz not null default now()
+);
+
+create table app.research_plan (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid not null references app.matter(id) on delete cascade,
+  project_id     uuid not null references app.research_project(id) on delete cascade,
+  version_no     int not null,
+  plan           jsonb not null default '{}'::jsonb,
+  status         text not null default 'draft' check (status in ('draft','approved','superseded')),
+  approved_by    uuid references app.user(id),
+  approved_at    timestamptz,
+  unique (project_id, version_no)
+);
+
+create table app.workflow_definition (
+  id             uuid primary key default gen_random_uuid(),
+  key            text not null,
+  kind           text not null default 'playbook' check (kind in ('playbook','automation','research','other')),
+  status         text not null default 'draft' check (status in ('draft','published','retired')),
+  owner_user_id  uuid references app.user(id),
+  created_at     timestamptz not null default now(),
+  unique (key)
+);
+
+create table app.workflow_version (
+  id             uuid primary key default gen_random_uuid(),
+  definition_id  uuid not null references app.workflow_definition(id) on delete cascade,
+  version_no     int not null,
+  graph_spec     jsonb not null,
+  content_hash   text not null,
+  published_by   uuid references app.user(id),
+  published_at   timestamptz,
+  unique (definition_id, version_no)
+);
+
+create table app.workflow_run (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid not null references app.matter(id) on delete cascade,
+  version_id     uuid not null references app.workflow_version(id),
+  status         text not null default 'pending' check (status in
+                    ('pending','running','waiting_human','waiting_external','completed','failed','cancelled')),
+  started_by     uuid not null references app.user(id),
+  started_at     timestamptz,
+  ended_at       timestamptz,
+  created_at     timestamptz not null default now()
+);
+
+create table app.workflow_step (
+  id             uuid primary key default gen_random_uuid(),
+  matter_id      uuid not null references app.matter(id) on delete cascade,
+  run_id         uuid not null references app.workflow_run(id) on delete cascade,
+  node_key       text not null,
+  status         text not null default 'pending' check (status in
+                    ('pending','running','waiting_human','waiting_external','completed','failed','skipped')),
+  assigned_to    uuid references app.user(id),
+  input          jsonb not null default '{}'::jsonb,
+  output         jsonb not null default '{}'::jsonb,
+  approval_id    uuid references app.approval(id),
+  error_code     text,
+  started_at     timestamptz,
+  ended_at       timestamptz,
+  unique (run_id, node_key)
+);
+
+-- ---------------------------------------------------------------------------
 -- Audit (append-only, hash-chained)
 -- ---------------------------------------------------------------------------
 create table audit.audit_event (
@@ -1208,6 +1651,7 @@ begin
   perform pg_advisory_xact_lock(hashtext('audit.audit_event'));
   select hash into v_prev from audit.audit_event order by seq desc limit 1;
   v_body := concat_ws('|',
+    coalesce(new.seq::text,''), coalesce(new.id::text,''), coalesce(new.at::text,''),
     coalesce(new.actor_type,''), coalesce(new.actor_id::text,''),
     new.action, new.subject_type, coalesce(new.subject_id::text,''),
     coalesce(new.matter_id::text,''), coalesce(new.request_id,''),
@@ -1382,22 +1826,102 @@ set search_path = app, pg_temp as $$
   and not app.is_walled(p_matter)
 $$;
 
+-- A grant on one resource; it never widens beyond the Matter or overrides a wall.
+create or replace function app.has_resource_grant(
+  p_type text, p_id uuid, p_level text default 'view'
+) returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.resource_grant g
+    where g.resource_type = p_type
+      and g.resource_id = p_id
+      and g.subject_user_id = app.current_user()
+      and g.revoked_at is null
+      and case g.level
+            when 'view' then 1 when 'comment' then 2
+            when 'post' then 2 when 'edit' then 3 else 0 end
+          >= case p_level
+            when 'view' then 1 when 'comment' then 2
+            when 'post' then 2 when 'edit' then 3 else 0 end
+  )
+$$;
+
+create or replace function app.has_document_access(p_document uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.document d
+    where d.id = p_document
+      and app.has_matter_access(d.matter_id)
+      and (d.confidentiality = 'matter'
+           or app.has_resource_grant('document', d.id, 'view'))
+  )
+$$;
+
+create or replace function app.can_read_conversation(p_conversation uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.conversation c
+    where c.id = p_conversation
+      and app.has_matter_access(c.matter_id)
+      and (
+        c.user_id = app.current_user()
+        or (c.visibility = 'matter')
+        or (c.visibility = 'shared'
+            and app.has_resource_grant('conversation', c.id, 'view'))
+      )
+  )
+$$;
+
+create or replace function app.can_read_task(p_task uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.task t
+    where t.id = p_task
+      and app.has_matter_access(t.matter_id)
+      and (
+        t.visibility = 'matter'
+        or t.created_by = app.current_user()
+        or t.assignee_id = app.current_user()
+        or app.is_admin()
+      )
+  )
+$$;
+
 revoke all on function app.current_user() from public;
 revoke all on function app.is_member() from public;
 revoke all on function app.is_admin() from public;
 revoke all on function app.is_walled(uuid) from public;
 revoke all on function app.has_matter_access(uuid) from public;
+revoke all on function app.has_resource_grant(text,uuid,text) from public;
+revoke all on function app.has_document_access(uuid) from public;
+revoke all on function app.can_read_conversation(uuid) from public;
+revoke all on function app.can_read_task(uuid) from public;
 grant execute on function app.current_user() to maverick_app, maverick_readonly;
 grant execute on function app.is_member() to maverick_app, maverick_readonly;
 grant execute on function app.is_admin() to maverick_app, maverick_readonly;
 grant execute on function app.is_walled(uuid) to maverick_app, maverick_readonly;
 grant execute on function app.has_matter_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_resource_grant(text,uuid,text) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.can_read_conversation(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.can_read_task(uuid) to maverick_app, maverick_readonly;
 
 alter function app.current_user() owner to maverick_owner;
 alter function app.is_member() owner to maverick_owner;
 alter function app.is_admin() owner to maverick_owner;
 alter function app.is_walled(uuid) owner to maverick_owner;
 alter function app.has_matter_access(uuid) owner to maverick_owner;
+alter function app.has_resource_grant(text,uuid,text) owner to maverick_owner;
+alter function app.has_document_access(uuid) owner to maverick_owner;
+alter function app.can_read_conversation(uuid) owner to maverick_owner;
+alter function app.can_read_task(uuid) owner to maverick_owner;
 
 -- ---------------------------------------------------------------------------
 -- RLS: every table with matter_id gets the same policy
@@ -1419,6 +1943,92 @@ begin
       t.table_name || '_matter', t.table_name);
   end loop;
 end $$;
+
+-- Resource-level policies replace the generic matter policy where a row can be
+-- narrower than the Matter.
+drop policy if exists document_matter on app.document;
+create policy document_access on app.document for all
+  using (app.has_document_access(id))
+  with check (app.has_matter_access(matter_id)
+              and (confidentiality = 'matter'
+                   or app.has_resource_grant('document', id, 'edit')));
+
+drop policy if exists conversation_matter on app.conversation;
+create policy conversation_access on app.conversation for all
+  using (app.can_read_conversation(id))
+  with check (app.has_matter_access(matter_id));
+
+drop policy if exists task_matter on app.task;
+create policy task_access on app.task for all
+  using (app.can_read_task(id))
+  with check (app.has_matter_access(matter_id));
+
+drop policy if exists message_matter on app.message;
+create policy message_access on app.message for all
+  using (app.can_read_conversation(conversation_id))
+  with check (app.can_read_conversation(conversation_id));
+
+drop policy if exists editing_session_matter on app.editing_session;
+create policy editing_session_access on app.editing_session for all
+  using (app.has_document_access(document_id))
+  with check (app.has_document_access(document_id));
+
+drop policy if exists document_proposal_matter on app.document_proposal;
+create policy document_proposal_access on app.document_proposal for all
+  using (app.has_document_access(document_id))
+  with check (app.has_document_access(document_id));
+
+drop policy if exists agent_run_matter on app.agent_run;
+create policy agent_run_access on app.agent_run for all
+  using (app.has_matter_access(matter_id)
+         and (app.is_admin()
+              or user_id = app.current_user()
+              or (conversation_id is not null
+                  and app.can_read_conversation(conversation_id))))
+  with check (app.has_matter_access(matter_id)
+              and (app.is_admin() or user_id = app.current_user()
+                   or (conversation_id is not null
+                       and app.can_read_conversation(conversation_id))));
+
+drop policy if exists context_package_matter on app.context_package;
+create policy context_package_access on app.context_package for all
+  using (exists (
+    select 1 from app.agent_run r
+    where r.id = context_package.run_id
+      and r.user_id = app.current_user()
+  ) or app.is_admin())
+  with check (exists (
+    select 1 from app.agent_run r
+    where r.id = context_package.run_id
+      and r.user_id = app.current_user()
+  ) or app.is_admin());
+
+drop policy if exists notification_matter on app.notification;
+create policy notification_recipient on app.notification for all
+  using (recipient_user_id = app.current_user() or app.is_admin())
+  with check (recipient_user_id = app.current_user() or app.is_admin());
+
+drop policy if exists resource_grant_matter on app.resource_grant;
+create policy resource_grant_read on app.resource_grant for select using (
+  app.is_admin()
+  or subject_user_id = app.current_user()
+  or exists (select 1 from app.matter m
+             where m.id = matter_id and m.lead_user_id = app.current_user()));
+create policy resource_grant_write on app.resource_grant for all using (
+  app.is_admin()
+  or exists (select 1 from app.matter m
+             where m.id = matter_id and m.lead_user_id = app.current_user()))
+  with check (
+  app.is_admin()
+  or exists (select 1 from app.matter m
+             where m.id = matter_id and m.lead_user_id = app.current_user()));
+
+drop policy if exists job_matter on app.job;
+create policy job_access on app.job for all
+  using (case when matter_id is null then app.is_admin()
+              else app.has_matter_access(matter_id) end)
+  with check (case when matter_id is null then app.is_admin()
+                   else app.has_matter_access(matter_id) end);
 
 -- blobs have no matter_id; they are readable only through a document version
 -- or a template the user can already see. The storage service inserts bytes
@@ -1506,13 +2116,63 @@ begin
   foreach t in array array['contact','client','forum',
                            'source','authority','authority_version','template',
                            'bundle','bundle_version','skill',
-                           'playbook','rule_instrument','format_rule','rule_snapshot','egress_policy']
+                           'playbook','rule_instrument','format_rule','rule_snapshot','egress_policy',
+                           'legal_instrument','instrument_version','instrument_snapshot','provision',
+                           'judgment','judgment_version','judgment_snapshot',
+                           'workflow_definition','workflow_version']
   loop
     execute format('alter table app.%I enable row level security', t);
     execute format('drop policy if exists %I on app.%I', t || '_firm', t);
     execute format('create policy %I on app.%I for all using (app.is_member()) with check (app.is_member())', t || '_firm', t);
   end loop;
 end $$;
+
+-- forum adapters: members read; admin writes
+alter table app.forum_adapter enable row level security;
+create policy forum_adapter_read on app.forum_adapter for select using (app.is_member());
+create policy forum_adapter_write on app.forum_adapter for all using (app.is_admin()) with check (app.is_admin());
+
+-- library: admin publishes; a member reads only with a grant
+alter table app.library_item enable row level security;
+create policy library_item_read on app.library_item for select using (
+  app.is_admin() or (
+    status = 'published' and exists (
+      select 1 from app.library_grant g
+      where g.item_id = library_item.id
+        and (g.subject_user_id = app.current_user()
+             or (g.subject_role is not null and exists (
+               select 1 from app.membership m
+               where m.user_id = app.current_user() and m.role = g.subject_role)))
+    )));
+create policy library_item_admin on app.library_item for all using (app.is_admin()) with check (app.is_admin());
+
+alter table app.library_version enable row level security;
+create policy library_version_read on app.library_version for select using (app.is_admin() or exists (
+  select 1 from app.library_item i
+  where i.id = library_version.item_id and i.status = 'published'
+    and exists (
+      select 1 from app.library_grant g
+      where g.item_id = i.id
+        and (g.subject_user_id = app.current_user()
+             or (g.subject_role is not null and exists (
+               select 1 from app.membership m
+               where m.user_id = app.current_user() and m.role = g.subject_role)))
+    )));
+create policy library_version_admin on app.library_version for all using (app.is_admin()) with check (app.is_admin());
+
+alter table app.library_grant enable row level security;
+create policy library_grant_read on app.library_grant for select using (
+  app.is_admin() or subject_user_id = app.current_user()
+  or (subject_role is not null and exists (
+    select 1 from app.membership m
+    where m.user_id = app.current_user() and m.role = subject_role)));
+create policy library_grant_admin on app.library_grant for all using (app.is_admin()) with check (app.is_admin());
+
+-- execution nodes: self or admin
+alter table app.execution_node enable row level security;
+create policy execution_node_self on app.execution_node for all
+  using (user_id = app.current_user() or app.is_admin())
+  with check (user_id = app.current_user() or app.is_admin());
 
 -- user: self or admin
 alter table app.user enable row level security;
@@ -1564,24 +2224,42 @@ create table if not exists ops.table_owner (
 );
 
 insert into ops.table_owner (table_name, module) values
-  ('matter','matter'), ('matter_member','access'), ('ethical_wall','access'), ('reuse_grant','access'),
-  ('contact','contacts'), ('client','contacts'), ('matter_party','matter'),
-  ('proceeding','proceedings'), ('proceeding_application','proceedings'),
-  ('exhibit','proceedings'), ('registry_event','proceedings'),
-  ('hearing','proceedings'), ('order','proceedings'),
-  ('task','work'), ('deadline','work'), ('appointment','work'),
+  ('firm','identity'), ('user','identity'), ('membership','identity'), ('session','identity'), ('device','identity'),
+  ('execution_node','identity'),
+  ('matter','matter'), ('matter_relation','matter'), ('matter_party','matter'), ('note','matter'),
+  ('matter_member','access'), ('ethical_wall','access'), ('reuse_grant','access'), ('resource_grant','access'),
+  ('contact','contacts'), ('client','contacts'),
+  ('forum','courts'), ('forum_adapter','forum_adapters'),
+  ('proceeding','proceedings'), ('proceeding_application','proceedings'), ('hearing','proceedings'),
+  ('order','proceedings'), ('registry_event','proceedings'), ('exhibit','proceedings'),
+  ('task','work'), ('task_document','work'), ('deadline','work'), ('appointment','work'),
   ('folder','documents'), ('document','documents'), ('document_version','documents'),
-  ('document_anchor','documents'), ('document_text','documents'),
-  ('citation','verification'), ('fact','facts'), ('fact_position','facts'),
-  ('evidence','evidence'), ('evidence_status','evidence'),
+  ('document_anchor','documents'), ('document_text','documents'), ('document_relation','documents'),
+  ('document_chunk','documents'), ('annotation','documents'), ('editing_session','documents'),
+  ('editing_session_participant','documents'), ('document_proposal','documents'),
+  ('template','library'), ('library_item','library'), ('library_version','library'), ('library_grant','library'),
+  ('blob','storage'),
+  ('classification','classification'),
+  ('source','corpus'), ('legal_instrument','corpus'), ('instrument_version','corpus'),
+  ('instrument_snapshot','corpus'), ('provision','corpus'),
+  ('authority','case_law'), ('authority_version','case_law'), ('judgment','case_law'),
+  ('judgment_version','case_law'), ('judgment_snapshot','case_law'),
+  ('research_query','research'), ('research_result','research'), ('retrieval_packet','research'),
+  ('research_project','research_studio'), ('research_plan','research_studio'),
+  ('fact','facts'), ('fact_position','facts'), ('evidence','facts'), ('evidence_status','facts'),
+  ('fact_evidence','facts'),
+  ('rule_instrument','corpus'), ('format_rule','rules'), ('rule_snapshot','corpus'),
+  ('citation','verification'), ('verification_run','verification'),
   ('approval','approvals'), ('decision','approvals'), ('gate','approvals'),
   ('filing','filing'), ('filing_item','filing'),
-  ('bundle','capabilities'), ('bundle_version','capabilities'),
-  ('playbook_run','workflow'), ('step_run','workflow'),
-  ('agent_run','harness'), ('agent_event','harness'),
-  ('conversation','harness'),
-  ('verification_run','verification'), ('retrieval_packet','knowledge'),
-  ('rule_snapshot','rules'),
+  ('bundle','capabilities'), ('bundle_version','capabilities'), ('skill','capabilities'),
+  ('playbook','workflow'), ('playbook_run','workflow'), ('step_run','workflow'),
+  ('workflow_definition','workflow'), ('workflow_version','workflow'),
+  ('workflow_run','workflow'), ('workflow_step','workflow'), ('job','workflow'),
+  ('conversation','harness'), ('message','harness'), ('agent_run','harness'), ('agent_event','harness'),
+  ('context_package','harness'), ('run_bundle','harness'),
+  ('browser_session','browser'), ('browser_control_lease','browser'),
+  ('notification','notifications'), ('notification_delivery','notifications'),
   ('egress_policy','policy'),
   ('audit_event','audit')
 on conflict (table_name) do nothing;
