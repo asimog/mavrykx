@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -9,8 +10,9 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
-from tools import comments, markdown_policy
+from tools import comments, markdown_policy, operations
 from tools.errors import ToolMissing
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +54,14 @@ CASES: tuple[NegativeCase, ...] = (
     ),
     NegativeCase("B6", "a cycle fails", "lint-imports", "importlinter.cycles.ini"),
     NegativeCase("B4", "a renderer importing Node fails", "depcruise", "renderer_fs.ts"),
+    NegativeCase(
+        "B2",
+        "a decision in an interface fails",
+        "operations-branch",
+        "operations/route_decision.py",
+    ),
+    NegativeCase("B3", "a route outside the registry fails", "operations-parity", "extra"),
+    NegativeCase("D2", "a human-only tool fails", "operations-parity", "human"),
 )
 
 
@@ -75,6 +85,10 @@ def _execute(case: NegativeCase) -> tuple[bool, str]:
             return _lint_imports(FIXTURES / case.target, case.rule)
         if case.kind == "depcruise":
             return _depcruise(FIXTURES / case.target)
+        if case.kind == "operations-branch":
+            return _operations_branch(case)
+        if case.kind == "operations-parity":
+            return _operations_parity(case)
     except ToolMissing as error:
         return False, str(error)
     raise ValueError(f"unknown negative case kind: {case.kind}")
@@ -96,6 +110,34 @@ def _comments(case: NegativeCase) -> tuple[bool, str]:
     findings = comments.check(FIXTURES, paths=[FIXTURES / case.target])
     rules = {finding.rule for finding in findings}
     return rules == {case.rule}, "\n".join(finding.render() for finding in findings)
+
+
+def _operations_branch(case: NegativeCase) -> tuple[bool, str]:
+    findings = operations.check_branches([FIXTURES / case.target])
+    rules = {finding.rule for finding in findings}
+    return rules == {case.rule}, "\n".join(finding.render() for finding in findings)
+
+
+def _operations_parity(case: NegativeCase) -> tuple[bool, str]:
+    module = _fixture_module()
+    if case.target == "extra":
+        findings = operations.check_parity(module.VALID, module.extra_api(), module.empty_cli(), ())
+    else:
+        findings = operations.check_parity(
+            module.HUMAN, module.empty_api(), module.empty_cli(), module.human_tools()
+        )
+    rules = {finding.rule for finding in findings}
+    return rules == {case.rule}, "\n".join(finding.render() for finding in findings)
+
+
+def _fixture_module() -> ModuleType:
+    path = FIXTURES / "operations" / "fixtures.py"
+    spec = importlib.util.spec_from_file_location("operations_fixtures", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _lint_imports(config: Path, expected: str) -> tuple[bool, str]:

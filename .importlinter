@@ -26,6 +26,7 @@ forbidden_modules =
     mavrykx.infrastructure
     mavrykx.interfaces
     mavrykx.agent
+    mavrykx.gateway
     mavrykx.composition
     mavrykx.root
 
@@ -37,6 +38,18 @@ source_modules =
 forbidden_modules =
     mavrykx.infrastructure
 
+[importlinter:contract:infrastructure-ports]
+name = B1e infrastructure imports no surface or gateway
+type = forbidden
+source_modules =
+    mavrykx.infrastructure
+forbidden_modules =
+    mavrykx.interfaces
+    mavrykx.gateway
+    mavrykx.agent
+    mavrykx.composition
+    mavrykx.root
+
 [importlinter:contract:layers]
 name = B1d layer order
 type = layers
@@ -45,6 +58,7 @@ layers =
     mavrykx.composition
     mavrykx.agent
     mavrykx.interfaces | mavrykx.infrastructure
+    mavrykx.gateway
     mavrykx.application
     mavrykx.domain
 

@@ -118,6 +118,7 @@ mavrykx/
 │   │   ├── api/              # FastAPI routes
 │   │   ├── cli/              # Typer commands
 │   │   └── tools/            # Pydantic AI tool adapters
+│   ├── gateway/              # the one ToolGateway
 │   ├── agent/                # Pydantic AI loop and run context
 │   ├── composition/          # AgentComposition, bundle selection
 │   └── root/                 # the only construction site
@@ -155,6 +156,8 @@ mavrykx/
 - **Infrastructure**: PostgreSQL repositories, blobs, browser, editor, model providers, court
   adapters. No business authority.
 - **Interfaces**: FastAPI, Typer, Pydantic AI tools, Electron IPC. Thin adapters only.
+- **Gateway**: the one path for agent tool calls: bundle, run scope, permission, policy, approval and
+  idempotency. It calls application services; it never touches a repository.
 - **Agent composition**: `AgentComposition` wires Harness capabilities and the legal pack to
   services through the gateway.
 - **Root**: the only place infrastructure is constructed.
