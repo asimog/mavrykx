@@ -18,6 +18,9 @@ dependencies = [
     "typer==0.29.3",
 ]
 
+[project.scripts]
+mavrykx = "mavrykx.root.cli:main"
+
 [dependency-groups]
 dev = [
     "httpx==0.29.0",
@@ -55,6 +58,7 @@ known-first-party = ["mavrykx", "modules", "tools", "migrations", "tests"]
 [tool.mypy]
 python_version = "3.14"
 strict = true
+plugins = ["pydantic.mypy"]
 warn_unreachable = true
 disallow_any_explicit = true
 files = ["src", "modules", "tools", "migrations"]
