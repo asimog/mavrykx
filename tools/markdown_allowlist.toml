@@ -53,3 +53,27 @@ reason = "Design authority: navigation, Matter workspace and product surfaces."
 [[file]]
 path = "references/README.md"
 reason = "Reference-repository study: pins, licences, test results, patterns and reuse restrictions."
+
+[[file]]
+path = "src/mavrykx/AGENTS.md"
+reason = "Local rules for the Python server."
+
+[[file]]
+path = "apps/desktop/AGENTS.md"
+reason = "Local rules for the Electron and React desktop."
+
+[[file]]
+path = "docs/AGENTS.md"
+reason = "Local rules for the design and implementation documentation."
+
+[[file]]
+path = "tools/AGENTS.md"
+reason = "Local rules for the verification tools."
+
+[[file]]
+path = "tests/AGENTS.md"
+reason = "Local rules for tests and negative fixtures."
+
+[[file]]
+path = "migrations/AGENTS.md"
+reason = "Local rules for the Alembic baseline and migrations."
