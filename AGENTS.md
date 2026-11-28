@@ -27,12 +27,8 @@ Design decisions live in `docs/v1/`; pins, checks and plans live in `docs/implem
 - Say your next action in one line. Update every few tool calls.
 - When work is complete, end with a standalone recap: findings, actions, next step.
 - Treat answered questions as done. Focus on the new request; revisit old answers only if asked or wrong.
-
-## Turns
-
-- A message with no tool call ends the turn. Do not end while work remains.
-- Do not announce a next step without taking it, offer to wait, list non-blocking decisions unless asked, or report a milestone as finished. Put status notes and the recap with your next tool call.
-- End only when blocked or complete; if blocked, say what blocks it and what would unblock it. Confirm risky or destructive actions first.
+- A message with no tool call ends the turn. Do not end while work remains, announce a next step without taking it, offer to wait, list non-blocking decisions (except in Plan Mode), or report a milestone as finished.
+- Put status and recap with your next tool call. End only when blocked or complete; if blocked, say what blocks it and what would unblock it. Confirm risky actions first.
 
 ## Writing
 
@@ -40,14 +36,20 @@ Design decisions live in `docs/v1/`; pins, checks and plans live in `docs/implem
 - Use plain words, short active sentences, one idea each. Use one word per thing; do not invent terms.
 - Use prose for connected ideas, bullets for separate items. Be concise; keep needed context.
 
-## Living documentation
+## Testing
+
+- Match evidence to the change: focused tests for code, the docs check for docs, a real profile run for user-visible work. Do not default to the full suite.
+- Verify the world, not a summary. Re-read the file or re-run the command. Report each command and its result; never just "checks passed".
+
+## Coding style
+
+- Never add comments to code.
+
+## Maintenance
 
 - Update this file in the same pull request when the map or a process changes. Review it in code review, keep it aligned with `README.md`, and audit quarterly.
 - Link to the owning document; do not copy it. Outdated instructions are worse than none.
-
-## Working rules
-
-- If `AGENTS.md` and the code disagree, follow the code and report each mismatch in your final reply.
+- If docs and code disagree, follow the code and report each mismatch in your final reply.
 
 ## Plan Mode
 
