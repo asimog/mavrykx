@@ -1,11 +1,11 @@
 # MavrykX
 
 **Architecture and the verification spine.** MavrykX is the platform; **Maverick** is the one agent.
-The design set is `docs/v1/`; the scaffold, operation registry and checks exist; no product module
-does yet. The scaffold and the Euro-Office PostgreSQL adapter under
-[`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md) are the working code.
+The design set is `docs/v1/`. The verification spine, a minimal `system.status` operation across HTTP,
+CLI and tool, the Electron shell, the Alembic baseline with RLS probes, and the Euro-Office PostgreSQL
+adapter are implemented. No product module exists yet.
 
-Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
+For agents, read [AGENTS.md](AGENTS.md). Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 
 | Doc | Contents |
 |---|---|
@@ -15,18 +15,20 @@ Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 | [Shared workspaces and collaboration](docs/v1/04-shared-workspaces-and-collaboration.md) | Matter workspace, roles, sequential editing, access, review, distributed execution |
 | [Product experience](docs/v1/05-product-experience.md) | Navigation, Today, Matter workspace, classification setup, documents, browser, Research Studio, library, workflows, inbox, onboarding |
 
-The SQL appendix remains at [docs/v1/schema/0001_core.sql](docs/v1/schema/0001_core.sql); it is not a sixth document.
+The SQL appendix remains at [docs/v1/schema/0001_core.sql](docs/v1/schema/0001_core.sql); it is not a
+sixth document. The RLS probes are [0002_rls_test.sql](docs/v1/schema/0002_rls_test.sql).
 
-Implementation plans:
+Working plans (status per document):
 
 - [Repository scaffold](docs/implementation/repo-scaffold.md)
 - [Enforcement audit](docs/implementation/enforcement-audit-plan.md)
 - [Euro-Office integration](docs/implementation/eurooffice-integration-plan.md)
 - [Euro-Office runtime analysis](docs/implementation/euro-office-runtime.md)
 
-Reference repositories:
-
-- [Reference study](references/README.md) — Kosmos and Stella, pinned commits, test results, patterns and reuse restrictions. The clones live outside this repository; no upstream code is vendored or built.
+Agent consumer rules: [issue tracker](docs/agents/issue-tracker.md) and [domain docs](docs/agents/domain.md).
+Reference repositories: [reference study](references/README.md) — Kosmos and Stella, pinned commits,
+test results, patterns and reuse restrictions. The clones live outside this repository; no upstream
+code is vendored or built.
 
 ## Working in the repository
 
@@ -37,11 +39,12 @@ uv run python -m tools.verify --fast
 uv run python -m tools.verify --full
 ```
 
-`--fast` is the edit loop. `--full` adds tests, the negative suite, dependency audits, lockfile drift,
-the schema checks and the RLS probes, and is what CI runs. Python 3.14 and `uv` 0.13.10 are required;
-Node is pinned to 26.13.1 in `.node-version`.
-
-`--full` needs a disposable PostgreSQL 17.12 database with pgvector:
+The command surface and full check list are in
+[repo-scaffold.md](docs/implementation/repo-scaffold.md) §4. `--fast` is the edit loop: Markdown and
+comment policy, mypy, TypeScript, ruff, ESLint, import-linter, dependency-cruiser and operation parity.
+`--full` adds pytest, the negative fixtures, `pip-audit` and `npm audit`, `uv lock --check`, and the
+baseline/RLS schema check. It requires Python 3.14, `uv` 0.13.10, Node 26.13.1, `psql` on `PATH`, and a
+disposable PostgreSQL 17.12 database with pgvector:
 
 ```bash
 docker run --rm -d --name mavrykx-pg -p 55433:5432 \
@@ -49,9 +52,15 @@ docker run --rm -d --name mavrykx-pg -p 55433:5432 \
   pgvector/pgvector:pg17
 export MAVRYKX_DATABASE_URL=postgresql+asyncpg://maverick_owner:maverick@127.0.0.1:55433/mavrykx
 uv run alembic upgrade head
+uv run python -m tools.verify --full
 ```
 
-The integration test drops and recreates the `app`, `audit`, `ref` and `ops` schemas; point it only at
-a disposable database.
+Docker is a development convenience here, never a product dependency. The integration test drops and
+recreates the `app`, `audit`, `ref` and `ops` schemas; point it only at a disposable database.
 
-**The whole system is the scope.** Do not build until the gate conditions in the architecture doc pass.
+CI runs `--full` on every pull request and on pushes to `main` against `pgvector/pgvector:pg17`
+(PostgreSQL 17.12); the `verify` check is required on `main`. E2E, contract-drift, table-ownership,
+court-leak and docs-agree checks are not wired yet.
+
+**Build in the architecture doc's order.** Each step's gate must pass before the next. The design is
+not a claim that the product exists.

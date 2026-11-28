@@ -23,7 +23,9 @@ A Matter is complete without litigation management or legal intelligence.
 
 **User** — one human login and audit actor.
 
-**Membership** — a user's firm role: `admin`, `lawyer`, `staff` or `intern`. A firm admin has access to every Matter.
+**Membership** — a user's firm role: `admin`, `lawyer`, `staff` or `intern`. A firm admin is a lawyer and
+has access to every Matter. The admin may delegate duties except promoting an admin; delegation never
+widens access.
 
 **Contact** — one deduplicated person or organisation.
 
@@ -33,7 +35,7 @@ A Matter is complete without litigation management or legal intelligence.
 
 **Responsible lawyer** — the lawyer named on the Matter. The lawyer is a Matter `edit` member. The name is not a separate permission role; the firm admin assigns it.
 
-**Matter member** — a user's grant inside one Matter: `edit` or `view`. A firm admin assigns the grant. An intern is a firm `intern` with `edit` or `view` access. A supervising lawyer is a firm `lawyer` with `edit` access.
+**Matter member** — a user's grant inside one Matter: `edit` or `view`. A firm admin or an authorised delegate assigns the grant. An intern is a firm `intern` with `edit` or `view` access. A supervising lawyer is a firm `lawyer` with `edit` access.
 
 **Section (workspace section)** — a named, ordered arrangement of documents inside one Matter. Its name is its heading. It is not a Workspace, not a Project and not a permission boundary. The baseline table is `folder`.
 
@@ -75,9 +77,21 @@ A Matter is complete without litigation management or legal intelligence.
 
 **Case law** — judgments and authorities, with citations and treatment.
 
+**Cited source** — the thing a citation relies on: a judgment version, an instrument version or
+provision, a document version and anchor, or an external `source` record. A cited source is owned by the
+module that owns the thing. It is not a citation.
+
+**Citation** — a use of a cited source at a specific anchor in a document version, where one exists:
+target kind, pinpoint, quote, verification state and checker. It is not the source and not a provider
+message citation.
+
+**Provider citation** — the Pydantic AI `Citation` attached to a model text part. It is transport and
+display metadata, never the legal record.
+
 **Library** — firm templates, precedents, checklists and know-how. Admin publishes; admin grants access.
 
-**Research Studio** — a Matter-scoped project for a multi-agent research plan. Not the Matter chat and not a Pydantic AI Workspace.
+**Research Studio** — a Matter-scoped research project with a plan executed by Maverick and its
+sub-agent tools. Not the Matter chat and not a Pydantic AI Workspace.
 
 **Workflow** — a Pydantic Graph definition and its runs. Deterministic orchestration, not an agent.
 
@@ -87,7 +101,9 @@ A Matter is complete without litigation management or legal intelligence.
 
 **AgentComposition** — the composition root that builds the Pydantic AI `Agent` from Harness capabilities and the legal pack.
 
-**Harness capability** — a Pydantic AI composable unit: `Skills`, `Memory`, `AskUser`, `SubAgents`, `StepPersistence`, `ToolSearch`, `Compaction`.
+**Harness capability** — a composable unit from the Pydantic AI Harness: `Skills`, `Memory`, `AskUser`,
+`SubAgents`, `StepPersistence`, `Planning`, `DynamicWorkflow`, `Goal`. Pydantic AI core capabilities such
+as `ToolSearch`, `Thinking`, `WebSearch`, `MCP` and `LocalWorkspace` are not Harness capabilities.
 
 **Tool** — one typed callable in the tool catalog.
 
@@ -103,7 +119,7 @@ A Matter is complete without litigation management or legal intelligence.
 
 **Submission** — a request for review. It composes a task, a submitted document version, an approval, annotations and a notification; it is not an entity.
 
-**Review** — a supervising lawyer's human decision on a submission, recorded through the approval and its annotations. It is not an entity.
+**Review** — a firm admin's or supervising lawyer's human decision on a submission, recorded through the approval and its annotations. It is not an entity.
 
 **Run** — one agent execution.
 
@@ -117,6 +133,12 @@ A Matter is complete without litigation management or legal intelligence.
 
 ## 2. Entities by owner
 
+This is the canonical owner map for domain entities and tables. `ops.table_owner` in the baseline is the
+executable table manifest; the two must agree for every baseline table. If they disagree, fix the SQL.
+`issue`, `argument`, `argument_authority`, `editing_session_participant` and `delegation` are designed but
+not baseline tables; add them with their owning module. `treatment` is a column on `judgment_version`,
+not a separate table.
+
 ### Identity and access
 
 - `firm` — the installation's organisation. Owner: identity.
@@ -128,6 +150,7 @@ A Matter is complete without litigation management or legal intelligence.
 - `matter_member` — Matter grant: `edit` or `view`. Owner: access.
 - `reuse_grant` — cross-Matter reuse. Owner: access.
 - `resource_grant` — grants a restricted document inside a Matter. Owner: access.
+- `delegation` — a scoped, audited grant of an admin's duties to another user; it never includes promoting an admin. Owner: identity.
 
 ### People
 
@@ -141,6 +164,7 @@ A Matter is complete without litigation management or legal intelligence.
 - `matter_relation` — Matter-to-Matter link. Owner: matter.
 - `note` — Matter-scoped note, readable by every Matter member. Owner: matter.
 - `proceeding` — one legal process. Owner: proceedings. Its classification/detail fields carry the impugned order, originating proceeding, jurisdiction basis, governing date and a composable `detail` JSONB. There is no proceeding-relation table and no connected-proceeding graph.
+- `proceeding_application` — an application nesting inside a Matter, Proceeding or another application. Owner: proceedings. It is not a Proceeding and not a sub-matter; the parent is same-Matter, the tree is depth-capped at 6 and the parent is immutable after insert.
 - `registry_event` — registered, transferred, renumbered, bench changed. Owner: proceedings.
 - `hearing` — dated occurrence. Owner: proceedings.
 - `order` — written or dictated result. Owner: proceedings.
@@ -164,6 +188,7 @@ A Matter is complete without litigation management or legal intelligence.
 - `document_version` — immutable version. Owner: documents.
 - `document_anchor` — stable location inside a version. Owner: documents.
 - `document_text` — derived text/page map; rebuildable. Owner: documents.
+- `document_chunk` — derived chunk and embedding of a document version; rebuildable. Owner: documents.
 - `document_relation` — exhibit, annexure, attachment, supersedes, translation. Owner: documents.
 - `annotation` — comment at an anchor. Owner: documents.
 - `editing_session` — the exclusive edit lease from a base version. Owner: documents.
@@ -182,10 +207,10 @@ A Matter is complete without litigation management or legal intelligence.
 - `instrument_version` — version with effective dates. Owner: corpus.
 - `instrument_snapshot` — fetched, hash-addressed source. Owner: corpus.
 - `provision` — addressable provision inside an instrument version. Owner: corpus.
-- `judgment` — case-law authority. Owner: case_law.
+- `judgment` — case-law authority: case number, neutral citation, forum and year. Owner: case_law.
 - `judgment_version` — version with text hash and treatment. Owner: case_law.
 - `judgment_snapshot` — fetched, hash-addressed source. Owner: case_law.
-- `citation` — use of an authority in a document version: pinpoint, quote, verification. Owner: verification.
+- `citation` — use of a cited source in a document version: polymorphic target, pinpoint, quote, verification. Owner: verification.
 - `treatment` — later judicial treatment. Owner: case_law.
 - `research_query` — research question. Owner: research.
 - `research_result` — candidate authority. Owner: research.
@@ -336,10 +361,18 @@ erDiagram
 
 ## 5. Invariants
 
-- Every legal row carries `matter_id` and has an RLS policy.
+These are the domain invariants. Service contracts in
+[03-application-agent-and-data.md](03-application-agent-and-data.md) and the access and edit-lease rules
+in [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) must satisfy
+them.
+
+- Every Matter-bound legal row carries `matter_id` and has an RLS policy. Firm, identity, reference and
+  corpus tables are scoped by firm or corpus; every `app` table has RLS.
 - Every workspace resource carries one `matter_id` and one owning module.
 - A document version is immutable; a save creates a new version and a restore creates a new version.
-- A citation points to a document version + anchor and an authority version.
+- A citation belongs to one citing document version (and an anchor where one exists) and points to exactly
+  one cited source target: a judgment version, an instrument version or provision, a cited document
+  version and anchor, or an external source. A citation is not a source.
 - An approval’s subject hash equals the subject’s current hash.
 - A filed document has an approved version and a filing record.
 - Closing a Matter records the disposition of its open work and never cascade-deletes a legal or workspace record.
@@ -362,7 +395,10 @@ erDiagram
 - Every agent-generated version and filing names the task or decision that authorised it.
 - A derived extraction pins the `document_text` hash; a re-run marks it stale.
 - An exhibit’s evidence and Proceeding belong to the same Matter.
-- A firm admin reads every Matter. A non-member reads no Matter content.
+- Positions, evidence assessments, exhibit numbers and registry identity are append-only attributed
+  records; a status column is a derived projection, never the record.
+- A firm admin is a lawyer and reads every Matter. A non-member reads no Matter content. A delegated act
+  records the delegate and the delegator; only an admin promotes an admin; delegation never widens access.
 - Every Matter member reads every note, task, conversation and message in the Matter. There is no private resource.
 - A resource grant never widens beyond the Matter.
 - A restricted document needs a grant; a Matter document is member-readable. The firm admin does not need the grant.
@@ -374,7 +410,7 @@ erDiagram
 - A proposal is base-hash-bound; a moved base makes it stale; apply is idempotent.
 - Every create, edit, submit, review, approve, archive and delete emits one audit event with the actor and subject.
 - A submission is bound to the submitted version hash; a new version makes the review stale.
-- A review is decided by a firm admin or a lawyer with Matter `edit` access; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked as a self-review.
+- A review is decided by a firm admin, a lawyer with Matter `edit` access, or a delegate who is a lawyer with Matter `edit` access; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked as a self-review.
 - An agent cannot approve its own work, clear a legal gate or delete a resource.
 - A run is leased to one node; a stale run is suspended; an uncertain effect is marked.
 - A classification proposal does not change the canonical Matter/Proceeding until confirmed.
@@ -433,14 +469,20 @@ This is a later design task, not implementation. Run it in two stages.
 
 ## 8. SQL appendix
 
-`docs/v1/schema/0001_core.sql` is the baseline DDL appendix. It is deliberately smaller than the model and is not the starting point. If the domain model and SQL conflict, fix the SQL. The RLS test is `0002_rls_test.sql`.
+[`0001_core.sql`](schema/0001_core.sql) is the baseline DDL appendix. It is deliberately smaller than the model and is not the starting point. If the domain model and SQL conflict, fix the SQL. The RLS test is [`0002_rls_test.sql`](schema/0002_rls_test.sql).
 
-The V1 baseline now includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task_document, notifications, jobs, editing session/proposal and execution node. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the schema appendix; any later change is a numbered migration.
+The baseline includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, citation/verification, proceeding application, document chunk, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task_document, notifications, jobs, editing session/proposal and execution node. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the schema appendix; any later change is a numbered migration.
 
 The CRM substrate is in the baseline: `firm`, `user`, `membership`, `contact`, `client`, `matter`, `matter_member` with `edit`/`view`, `note`, `task` with assignee and work kind, `appointment` with a required Matter, `folder`, `document` and `document_version`, `conversation`, `message`, `resource_grant` for restricted documents, `editing_session`, `approval` and the audit chain. A **section** is a `folder` row; there is no second container table.
 
-The baseline enforces the simplified model. A firm admin reads every Matter. A non-member reads no Matter. A Matter member reads every Matter resource; there are no private notes, private tasks, private conversations or private traces. Restricted-document grants cover `document`, `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` through `has_document_access`, `has_document_version_access` and `has_document_relation_access`.
+The baseline's RLS policies define the simplified Matter access model. The probes in `0002_rls_test.sql`
+cover it; the Python test and SQL expectations must be reconciled before step 1 (see the enforcement
+plan §3). A firm admin is a lawyer and reads every Matter. A non-member reads no Matter. A Matter member reads every
+Matter resource; there are no private notes, private tasks, private conversations or private traces.
+Restricted-document grants cover `document`, `document_version`, `document_text`, `document_anchor`,
+`annotation`, `document_relation` and `document_chunk` through `has_document_access`,
+`has_document_version_access` and `has_document_relation_access`.
 
 The edit lease has `opening`, `active`, `closing`, `closed`, `failed`, `revoked` and `expired`, a save idempotency key on `document_version`, and takeover-request/approval fields. There is no checkpoint and no `editor_recovery` source. The audit event has four actor types, trigger, run, initiating user, approval status and approver as columns.
 
-Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. V1 modules do not write them; `corpus`, `case_law`, `rules` and `workflow_*` are the live path. A later cleanup migration may drop them once no old reader remains.
+Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. They are not the live path; `source`, `legal_instrument*`, `provision`, `judgment*`, `format_rule` and `workflow_*` are. Do not add a new reader. The final citation target is the polymorphic cited-source model in §1 and §5. The baseline still points `citation` at `authority`/`authority_version`; a forward-only migration must add the explicit target columns, backfill, and switch the foreign key before the citation feature ships. Dropping a legacy table requires a forward-only migration and approval.

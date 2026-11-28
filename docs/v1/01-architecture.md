@@ -19,28 +19,30 @@ The platform is a modular monolith with a firm server, Electron clients and auth
 - CRM foundations first; the AI legal harness second.
 - One firm with multiple users; a client may have many Matters.
 - One shared Matter workspace; sequential document editing. No real-time co-editing in V1.
-- A firm admin has access to every Matter and assigns Matter access to lawyers, staff and interns.
-- No ethical walls, no conflict-check subsystem and no private-resource rule. Matter resources are Matter-wide; restricted documents need a resource grant, except for the firm admin.
+- A firm admin is a lawyer, has access to every Matter and assigns Matter access to lawyers, staff and interns.
+- No ethical walls, no conflict-check subsystem and no private-resource rule. The matter-open gate records client and scope. Matter resources are Matter-wide; restricted documents need a resource grant, except for the firm admin.
 - Self-hosted per firm; one installation serves one firm.
 - Human approval for commit, filing, send, grant and delete.
 - DOCX/PDF is the work product; chat is not a legal record.
 - Matters may start with a note alone; a client is optional at intake.
 - Indian forums only.
 - One application-service layer; CLI, HTTP and agent tools call it.
-- No conflict-check subsystem; the matter-open gate records client and scope.
 
 ---
 
 ## 2. Deployment shapes
 
-Installed and running are different facts. Every client installs the local editor; the server pack is installed but is not started in V1.
+Installed and running are different facts. In the target install, every client installs the local editor;
+the server pack is installed but is not started in V1.
 
 - **Local.** One local Python process runs `api` + `worker`. Bundled PostgreSQL. Electron on the same machine. The Euro-Office frontend and `x2t` are installed; no `DocService` process runs.
 - **Firm LAN.** Firm server runs the Python roles. PostgreSQL and blobs live on the firm server. Electron on each desk; document editing is local and saves through the API.
 - **Firm remote.** Same firm server behind the remote connection service. No legal data at the relay.
 - **Shared live session — deferred.** For a future live co-editing decision, the server pack could run `DocService`, `FileConverter` and the PostgreSQL queue on the firm server or a sharing client on the LAN. That is not a hosted DocumentServer service. It is not part of V1, not started by the CRM, and not required for multi-user collaboration.
 
-The default installer is the shared-capable app: under 15 minutes and under 3.5 GB installed. A local-only build without the server pack stays under 1.5 GB. Redis is not used; the queue is PostgreSQL. Editor session stores are editor-session infrastructure, never legal stores. V1 has no Docker dependency.
+The target installer is the shared-capable app: under 15 minutes and under 3.5 GB installed. A local-only
+target build without the server pack stays under 1.5 GB. Redis is not used; the queue is PostgreSQL.
+Editor session stores are editor-session infrastructure, never legal stores. V1 has no Docker dependency.
 
 ---
 
@@ -101,8 +103,8 @@ flowchart TB
 
 ### Matter management — the Clio-shaped substrate
 
-- `identity` — firm, user, membership, session, device, execution node.
-- `access` - matter membership, reuse grant, restricted-document resource grant, the one Matter access policy.
+- `identity` — firm, user, membership, session, device, execution node, delegation.
+- `access` — matter membership, reuse grant, restricted-document resource grant, the one Matter access policy.
 - `contacts` — contact, client.
 - `matter` — matter, parties, relations, notes.
 - `work` — tasks, assignments, task-document links, deadlines, appointments.
@@ -116,19 +118,19 @@ This layer works with notes alone. It does not classify, research, draft or run 
 
 - `courts` — forum directory and hierarchy.
 - `forum_adapters` — cause lists, hearing dates, order downloads, case status. Technical only; not a legal rule engine.
-- `proceedings` - proceeding, proceeding application tree, proceeding detail/classification, hearings, orders, registry events.
+- `proceedings` — proceeding, proceeding application tree, proceeding detail/classification, hearings, orders, registry events.
 - `filing` — filing, filing items, fees, acknowledgment, response. Portal attempts and confirmation are deferred.
 
 ### Legal intelligence
 
 - `classification` — guided matter intelligence after the Matter is opened; the advocate confirms or corrects.
 - `corpus` — primary-law ingestion only: court rules, statutes, laws, regulations, notifications.
-- `case_law` — judgments, authorities, citations and treatment.
+- `case_law` — judgments, authorities and treatment. `verification` owns the citation records.
 - `rules` — operational format/procedural rules derived from corpus provisions.
 - `research` — research queries and results.
-- `research_studio` — multi-agent research projects and plans.
+- `research_studio` — multi-step research projects and plans, executed by Maverick and its sub-agent tools.
 - `library` — firm templates, precedents, checklists and know-how; admin publishes, admin grants.
-- `facts` — facts, evidence, positions, statuses, exhibits, evidence notebook.
+- `facts` — facts, evidence, positions, statuses and the evidence notebook. `proceedings` owns the exhibit record.
 - `analysis` — issues, arguments and argument authorities.
 - `drafting` — render jobs; reads library templates. Owns no table.
 - `verification` — citation, quote, pinpoint, format, cross-reference and completion checks.
@@ -157,54 +159,29 @@ This layer works with notes alone. It does not classify, research, draft or run 
 
 ## 5. Tech stack
 
-Versions checked on 2026-11-26. Pin exact versions.
+The exact pins, the pairs that move together and the lockfile rules are in
+[`docs/implementation/repo-scaffold.md`](../implementation/repo-scaffold.md) §1. The lockfiles are the
+evidence. This section records the architecture-level choices; it does not repeat the pin table.
 
-### Backend
-
-- Python **3.14.10** target; Pydantic AI floor **3.11**. 3.14 is chosen for the Harness wheel and dependency set; 3.15 is not targeted.
-- Pydantic **2.14.4**.
-- pydantic-settings **2.16.3** for typed configuration.
-- Pydantic AI Harness **0.75.0**, pinned exactly. It requires `pydantic-ai-slim` **2.75.0**; `pydantic-ai` and `pydantic-graph` are not pinned separately. Provider extras are added to `pydantic-ai-slim`.
-- FastAPI **0.165.0**.
-- SQLAlchemy **2.1.9**; asyncpg **0.32.0**; Alembic **1.20.1**.
-- Typer **0.29.3**.
-- ag-ui-protocol **1.0.0**.
-- `lxml` **6.1.3** reads OOXML for verification; `python-docx` **1.2.0** is optional for simple extraction; `pypdf` **7.2.0** extracts PDF text; the builder is the only writer.
-- OCR is local: `ocrmypdf` **17.14.2** for PDFs, `pytesseract` **0.3.13** for images, Tesseract 5.x with English and Indic language data pinned with the installer.
-- `argon2-cffi` **25.1.0** for passwords; `pyotp` **2.12.1** for TOTP; `aiosmtplib` **5.1.3** and `imap-tools` **1.16.0** for email, deferred.
-- OpenTelemetry **1.45.2**; structlog **26.1.0**; `logfire` **6.0.1** optional and development-only.
-- pytest **9.2.0**; pytest-asyncio **1.5.0**; hypothesis **6.170.17**; pytest-cov **7.1.0**; httpx **0.29.0**.
-- ruff **0.17.6** (including the `S` security rules); mypy **2.4.1**; import-linter **2.17**; pip-audit **2.10.1**; uv **0.13.10**; `just` pinned in CI.
-- `python-multipart` **0.0.34** for uploads; `itsdangerous` **2.2.0** for signed URLs; `cryptography` **50.0.2** for device keys.
-- DBOS **3.7.0** optional behind `ExecutionEngine`.
-- Alembic is the migration runner; revisions are numbered and forward-only, and `downgrade` is not implemented. The baseline revision executes `0001_core.sql`. `alembic check` fails CI on drift between the models and the migrations.
-
-### Data
-
-- PostgreSQL **17.12** is the V1 baseline. PostgreSQL 19 is not targeted.
-- pgvector **0.8.7**; Python client **0.5.1**.
-- Blob store on the firm's disk/storage.
-
-### Desktop
-
-- React / React DOM **19.3.1**.
-- TanStack Router **1.170.46**; TanStack Query **5.108.4**.
-- Electron **45.5.0** (Chromium **156.0.8078.109**, Node **24.22.3**). The bundled Node is the native-module ABI; the build Node is not.
-- Vite **8.4.0**; TypeScript **6.0.3**, not 7.0.2: `typescript-eslint` 8.74 supports `<6.1.0`; pin 6.0.3 until the lint toolchain supports 7.
-- Tailwind CSS **4.3.5**; `@vitejs/plugin-react` **6.3.0**.
-- `@ag-ui/client` **1.0.5**.
-- Zustand **5.1.0** for UI and session state; TanStack Query owns server state.
-- `openapi-typescript` **7.13.0** and `openapi-fetch` **0.17.0** generate and call the API client.
-- `ajv` **8.20.0** validates generated JSON Schema in the renderer; `react-hook-form` **7.92.0** handles forms.
-- `@tailwindcss/vite` **4.3.5**; `eslint` **10.15.0**; `typescript-eslint` **8.74.0**; `eslint-plugin-import-x` **4.18.1**; `vitest` **5.1.2**; `@testing-library/react` **16.3.3**; `@playwright/test` **1.65.1**; `electron-builder` **26.18.0**; `dependency-cruiser` **18.9.0**.
-- `electron-vite` **6.0.0**; `@tanstack/router-plugin` **1.169.0**; `@types/node` **24.19.4** (matches Electron's Node 24.22.3); `@types/react` **19.3.3**; `@types/react-dom` **19.3.0**.
-- Node **26.13.1** development/build only.
-
-### Editor
-
-- Euro-Office **9.3.8** DesktopEditors for the V1 local editor. The DocumentServer build stays pinned and installed in the server pack, but no `DocService` process runs and no hosted DocumentServer or Docker dependency is introduced.
-- The integration is the embedded editor plus `x2t`; saves go through the MavrykX API. Docs API/WOPI shared-session integration is deferred with live co-editing.
-- The local profile uses the vendored editor and builder; the server pack is installed but not started by the CRM.
+- Python **3.14**; FastAPI; Pydantic at the boundaries; SQLAlchemy and asyncpg for persistence; Alembic
+  forward-only.
+- Pydantic AI for the run loop; the Pydantic AI Harness for capabilities. `pydantic-ai-harness==0.75.0`
+  pins `pydantic-ai-slim==2.75.0`; do not declare `pydantic-ai` or `pydantic-graph` separately.
+- PostgreSQL **17.12** with pgvector; content-addressed blobs; the queue is PostgreSQL.
+- React 19 and Electron **45.5.0**; Electron carries Node **24.22.3**, the native-module ABI, which is
+  not the build Node. TypeScript **6.0.3**, not 7.0.2: `typescript-eslint` 8.74 supports `<6.1.0`.
+  Vite; TanStack Router and Query; Zustand for UI state only.
+- One OpenAPI source: FastAPI emits it; `openapi-typescript` generates the client. No hand-written
+  request types; no Zod in the renderer.
+- Euro-Office **9.3.8** local editor and `x2t`; no `DocService` process in V1. The server pack is
+  installed but not started.
+- `lxml` reads OOXML for verification; the builder is the only writer; `python-docx` is optional for
+  simple extraction; `pypdf` extracts PDF text.
+- OCR is local; Tesseract 5.x with English and Indic language data is pinned with the installer.
+- `ruff`, `mypy --strict`, `import-linter`, ESLint, `tsc`, `dependency-cruiser`, `pytest`, `hypothesis`,
+  `pip-audit` and `npm audit` are the quality tools.
+- `alembic check` is the intended model-drift gate once SQLAlchemy models exist. Today
+  `tools/schema.py` checks the baseline digest, migration head and RLS. `downgrade` is not implemented.
 
 ---
 
@@ -237,21 +214,21 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 - Public per module: `api.py`, `contracts.py`, `service.py`, shared DTOs.
 - Private: `models.py`, `repository.py`, `mappers.py`, `internal/`, migrations, SQL and tests.
-- The table-ownership manifest names one owner per table.
+- The `ops.table_owner` manifest names one owner per table.
 
-### CI enforcement
+### Required boundary checks
 
-- `import-linter` layers and independence contracts.
-- `ruff` banned imports for wrong-layer FastAPI/SQLAlchemy/Pydantic AI/Electron use.
-- `mypy --strict` on domain and application services.
-- Table ownership: every table has exactly one owner.
-- Schema drift: SQLAlchemy models match the baseline.
-- Tool/catalog parity.
-- CLI/route/tool parity.
-- No cycles.
-- Renderer boundary.
-- No-god-file check.
-- No court-specific code in domain or application services.
+The enforcement plan owns the rule catalogue and records which checks are wired. The required rules:
+
+- `import-linter` layers and independence contracts; `mypy --strict` on domain and application services.
+- Table ownership: the `ops.table_owner` manifest in the baseline; `tools/ownership.py` is the planned check.
+- Schema: baseline digest, migration head and RLS in `tools/schema.py`; `alembic check` once SQLAlchemy models exist.
+- Tool/catalog parity and CLI/route/tool parity in `tools/operations.py`.
+- No cycles: import-linter and dependency-cruiser.
+- Renderer boundary: dependency-cruiser.
+- No-god-file check: planned.
+- No court-specific code in domain or application services: `tools/court_leak.py` is planned.
+- A rule is not enforced until its negative fixture fails for the right reason.
 
 ### Database, filesystem and Electron
 
@@ -264,21 +241,30 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 ## 7. Editor and document authority
 
-- V1 uses the embedded Windows-native Euro-Office editor and `x2t`; there is no shared live session and no `DocService` process.
-- One active `editing_session` is the edit lease. Only its holder may save. Another user who opens the document reads the latest committed version.
-- A save carries the lease, base version and base hash. The service locks the document row, verifies both, creates an immutable `document_version` and updates the current pointer. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`.
-- Agents submit base-bound `document_proposal` rows; they do not hold the human edit lease and cannot apply while it is active.
-- There is no server checkpoint and no `editor_recovery` version in V1. A restore creates a new version from an old blob and resets approval.
-- The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only. Reading for verification goes to the OOXML package directly (`lxml`), not through the editor API.
-- The editor gets no database credential; MavrykX owns identity, versions, permissions, approvals and audit.
-- A future live co-editing decision may implement the same edit-lease and save seam. V1 does not add CRDT, OT, cursors or a second document authority.
+- V1 uses the embedded Windows-native Euro-Office editor and `x2t`; there is no shared live session, no
+  `DocService` process and no Docker dependency.
+- One active `editing_session` is the edit lease. Only its holder may save; another user reads the latest
+  committed version. The full contract, error names and conflict rules are owned by
+  [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §6.
+- A save is base-version and base-hash bound; it creates an immutable `document_version` and moves the
+  current pointer. A moved base or lost lease is refused. There is no silent overwrite.
+- Agents submit base-bound `document_proposal` rows; they do not hold the human lease and cannot apply
+  while it is active.
+- There is no server checkpoint and no `editor_recovery` version in V1. A restore creates a new version
+  from an old blob and resets approval.
+- The builder is the sole agent/offline DOCX mutator; `lxml` reads the OOXML package for verification.
+  The editor gets no database credential and no version-creation path.
+- A future live co-editing decision may implement the same edit-lease and save seam. V1 does not add
+  CRDT, OT, cursors or a second document authority.
 
 ---
 
 ## 8. Deployment and operations
 
-- Signed Windows installer for the desktop; signed Windows/Linux server installer. No Docker dependency; a development machine may use a disposable PostgreSQL container for tests, never the product.
+- Target packaging: a signed Windows installer for the desktop and a signed Windows/Linux server installer. No Docker dependency; a development machine may use a disposable PostgreSQL container for tests, never the product.
 - Bundled PostgreSQL, localhost-only; clients talk to the API, never the database.
+- No data migration from a prior product. The baseline is the first schema; later changes are
+  forward-only numbered migrations before pilot data.
 - Blobs content-addressed; backup manifest pins DB snapshot, blobs and audit head.
 - Encrypted backups; dry-run restore; quarterly drill.
 - Remote connection service: rendezvous + E2E relay; the firm server still authenticates and authorises.
@@ -290,9 +276,15 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 This is engineering sequence, not product releases. Steps 1–6 are the legal CRM and shared Matter workspace. Step 7 is Maverick's AI Legal Harness. Step 8 is the first end-to-end legal workflow.
 
+This is the product build order. The verification-spine order is in
+[`repo-scaffold.md`](../implementation/repo-scaffold.md) §6, the enforcement rollout in
+[`enforcement-audit-plan.md`](../implementation/enforcement-audit-plan.md) §13, and the document-step
+order in [`eurooffice-integration-plan.md`](../implementation/eurooffice-integration-plan.md) §12.
+Those are sub-orders, not alternative product sequences.
+
 **Step 0 — verification spine (exists).** The scaffold, operation registry, boundary checks, baseline schema, RLS probes and `tools.verify` gate. Every later step keeps them green.
 
-1. **Firm, users, memberships and roles.** Firm bootstrap, admin/lawyer/staff/intern membership, sessions, devices and the audit actor. Gate: a firm admin reads every Matter by role; a non-member reads none.
+1. **Firm, users, memberships and roles.** Firm bootstrap, admin/lawyer/staff/intern membership, sessions, devices, delegation and the audit actor. Gate: a firm admin reads every Matter by role; a non-member reads none; a delegate cannot promote an admin and never gains wider access.
 2. **Clients, contacts and Matters.** Contact deduplication, client with many Matters, Matter open/close, the matter-open gate, parties and notes-first intake. Gate: a client with two Matters is isolated; a Matter can exist with a note and no client.
 3. **Shared Matter workspace and resource permissions.** Firm-admin Matter access, Matter `edit`/`view` grants, sections, restricted-document grants, the one access policy, the workspace change feed and cross-resource audit. Gate: a firm admin sees every Matter; a non-member sees no Matter; cross-Matter and grant negative tests pass for sections and the shared policy; each resource added in steps 4–5 extends the same fixtures before its surface ships.
 4. **Documents, Euro-Office, versions and audit.** Upload, local editor, edit lease, base-bound save, immutable versions, compare, restore, tracked changes, proposals and hash-bound approval. Gate: two users edit sequentially with no silent overwrite; a stale save is refused; restricted-document grants hold for versions, text, anchors, annotations, relations and chunks.
@@ -307,9 +299,14 @@ This is engineering sequence, not product releases. Steps 1–6 are the legal CR
 
 ## 10. Acceptance gates
 
+These are the product acceptance gates. Component acceptance is in
+[03-application-agent-and-data.md](03-application-agent-and-data.md) §11 and
+[04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §13; the domain
+invariants are in [02-domain-model.md](02-domain-model.md) §5.
+
 **CRM and shared workspace.**
 
-- A firm has an admin, at least two lawyers and a staff/intern; roles and Matter access are enforced; a firm admin reads every Matter; a non-member reads none.
+- A firm has an admin, at least two lawyers and a staff/intern; the admin is a lawyer; roles and Matter access are enforced; a firm admin reads every Matter; a non-member reads none. A delegate cannot promote an admin and never gains wider access.
 - A client holds two Matters; documents, notes, tasks, events, conversations and approvals never cross the Matter boundary.
 - Two lawyers and an intern work in one Matter. Each sees the latest saved shared state and the attribution for every change.
 - One user holds the document edit lease; another reads the latest version; a stale save is refused; the next save creates one immutable version.
@@ -330,9 +327,14 @@ This is engineering sequence, not product releases. Steps 1–6 are the legal CR
 - A user browser and agent browser are separate; a handoff is visible and revocable.
 - A workflow run pins its definition version; a legal gate cannot be cleared by the graph.
 - An intern's agent inherits the intern's grants, cannot read a restricted document and cannot approve.
-- Import layers, table ownership, renderer isolation and no-god-file checks fail a broken fixture.
+- Import layers and renderer isolation fail a broken fixture now. Table-ownership and no-god-file checks
+  are required before step 1; their negative fixtures do not exist yet.
 
-**Schema smoke test (target run pending).** The proposed schema is `0001_core.sql` with `0002_rls_test.sql`. A vector-free copy passed the SQL parse and RLS probes on PostgreSQL 18; the target run on PostgreSQL 17.12 + pgvector 0.8.7 is pending and must pass before step 1. The expected result is 95 `app` tables, 0 without RLS, 0 `matter_id` tables without a policy, and passing probes for Matter isolation, firm-admin access, restricted-document child access, the application tree and the audit chain. The workspace step adds no table for a section; it uses `folder`.
+**Schema smoke test.** The baseline is `0001_core.sql` with `0002_rls_test.sql`. CI has run the baseline
+on `pgvector/pgvector:pg17` (PostgreSQL 17.12) and the previous revision passed. Re-run it for the
+current revision before step 1. The baseline has 95 `app` tables, 0 without RLS, and 0 `matter_id` tables
+without a policy. pgvector 0.8.7 is the product target; the CI image tag does not assert that patch. The
+workspace step adds no table for a section; it uses `folder`.
 
 ---
 

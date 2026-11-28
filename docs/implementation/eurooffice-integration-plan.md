@@ -11,7 +11,7 @@ Euro-Office 9.3.8 only. No other editor distribution is used, bundled or referen
 ## 1. Decisions
 
 - **Editor:** Euro-Office 9.3.8, DesktopEditors `v9.3.8` (`e681296d8173`) and DocumentServer `v9.3.8`.
-- **Packaging:** one Electron installer, roughly 3 GB installed. It carries the local editor, `x2t`, and the server pack - DocService, FileConverter, PostgreSQL 17.12 and the PostgreSQL queue adapter. No RabbitMQ, no Erlang. Server components are installed but not started in V1.
+- **Packaging:** target one Electron installer, roughly 3 GB installed. It carries the local editor, `x2t`, and the server pack - DocService, FileConverter, PostgreSQL 17.12 and the PostgreSQL queue adapter. No RabbitMQ, no Erlang. Server components are installed but not started in V1.
 - **V1 mode:** local editing only. A document is edited by one user at a time under an edit lease; other authorised users read the latest saved version. Co-editing, peer-hosted sharing and DocumentServer sessions are deferred.
 - **Fidelity:** DOCX round-trip fidelity is a hard requirement. Euro-Office is the editor; there is no CRDT layer, no alternate editor and no converted format as the record.
 - **Database:** PostgreSQL 17.12 is bundled and run as a child process under the user account, with data in `ProgramData`. The development machine's 18.1 instance on 5433 is a convenience, not the product.
@@ -33,7 +33,7 @@ Local is the V1 mode. The collaborating mode is retained as a deferred option, n
 | Services | None | `DocService`, `FileConverter`, PostgreSQL adapter |
 | Conversion | Local `x2t.exe` | Server `x2t.exe` through `FileConverter` |
 | Save | `asc_nativeGetFile3` → MavrykX API → version | Callback → MavrykX API → version |
-| Approval | At save | At commit |
+| Review/approval | On the saved version | At commit |
 | Failure scope | One user | The live session |
 
 Local mode is the openadvo/advdsh pattern: the editor is embedded and no server process exists. Shared mode is the only place a live session, and therefore the only place a lost session, can occur.
@@ -137,9 +137,8 @@ Electron owns the lifecycle. Nothing runs at login.
 - **No elevation.** Child processes run as the user. Only the installer needs administrator rights, for the firewall rule and the VC++ runtime.
 - **Single instance.** One stack per machine, enforced by an app lock.
 
-Supervision is process management, not a service manager: if the app quits or the user logs out, the share ends. That is deliberate.
-
-Supervision: WinSW, reusing the service XML shape from `document-server-package/exe/winsw`. No Inno Setup.
+Supervision is process management, not a service manager: nothing runs at login, and if the app quits or
+the user logs out, the share ends. That is deliberate. No Windows service and no Inno Setup are installed.
 
 ---
 
@@ -169,7 +168,9 @@ Wiring, configuration and limits are in `vendor/euro-office/pg-adapter/README.md
 
 ### Node
 
-Not required on the machine if `DocService` and `FileConverter` are built with `pkg`. If they run from source instead, pin **Node 22**; the development machine's Node 24 is newer than the build expects.
+Not required on the machine if `DocService` and `FileConverter` are built with `pkg`. If the deferred
+shared mode runs them from source instead, pin **Node 22**; the repository's build Node 26.13.1 and
+Electron's Node 24.22.3 are not that runtime.
 
 ### Optional, not installed
 
@@ -250,7 +251,7 @@ In a multi-user Matter, a firm admin or a lawyer with Matter `edit` access revie
 
 ## 10. Verification
 
-V1 checks:
+The V1 checks below are the document-step acceptance list; run them when the step is built.
 
 1. Open and edit DOCX; styles, tables, numbering and headers survive.
 2. Save and reopen DOCX in Word.
@@ -290,7 +291,8 @@ The deferred shared-session checks are: two browsers edit one document in a live
 
 ## 12. Build order
 
-V1, in the CRM document step:
+This is the document-step sub-order within [architecture step 4](../v1/01-architecture.md) §9; it is not
+the product build order. V1, in the CRM document step:
 
 1. PostgreSQL 17.12 native on a free port (the example uses 5432), role and database created. The current 18.1 instance on 5433 is a development convenience; CI and the installer use 17.12.
 2. Reduced local editor tree staged and verified against the 9.3.8 pins.
