@@ -1,16 +1,18 @@
 # MavrykX — Euro-Office integration plan
 
-**Status:** current · **Version:** 1 · **Date:** 2026-11-26
+**Status:** current · **Version:** 1 · **Date:** 2026-11-28
 
 Euro-Office 9.3.8 only. No other editor distribution is used, bundled or referenced by this plan.
+
+**V1 scope.** The CRM and shared Matter workspace use the embedded Windows-native Euro-Office editor and `x2t`. Document editing is sequential: one edit lease per document, saves through the MavrykX API, immutable versions, no live co-editing. V1 starts no `DocService`, has no hosted DocumentServer and has no Docker dependency. The shared live-session material in this plan is retained as a deferred option and is not part of the CRM build order.
 
 ---
 
 ## 1. Decisions
 
 - **Editor:** Euro-Office 9.3.8, DesktopEditors `v9.3.8` (`e681296d8173`) and DocumentServer `v9.3.8`.
-- **Packaging:** one Electron installer, roughly 3 GB installed. It carries the local editor, `x2t`, and the server pack - DocService, FileConverter, PostgreSQL 17.12 and the PostgreSQL queue adapter. No RabbitMQ, no Erlang. Server components are installed but not started.
-- **Two modes:** local editing by default; any client can become the shared host by sharing a workspace. Co-editing starts with a share and stops when it ends.
+- **Packaging:** one Electron installer, roughly 3 GB installed. It carries the local editor, `x2t`, and the server pack - DocService, FileConverter, PostgreSQL 17.12 and the PostgreSQL queue adapter. No RabbitMQ, no Erlang. Server components are installed but not started in V1.
+- **V1 mode:** local editing only. A document is edited by one user at a time under an edit lease; other authorised users read the latest saved version. Co-editing, peer-hosted sharing and DocumentServer sessions are deferred.
 - **Fidelity:** DOCX round-trip fidelity is a hard requirement. Euro-Office is the editor; there is no CRDT layer, no alternate editor and no converted format as the record.
 - **Database:** PostgreSQL 17.12 is bundled and run as a child process under the user account, with data in `ProgramData`. The development machine's 18.1 instance on 5433 is a convenience, not the product.
 - **Reductions:** English only, no presentation, no Visio, no AdminPanel, Metrics or npm payload.
@@ -20,9 +22,9 @@ Euro-Office 9.3.8 only. No other editor distribution is used, bundled or referen
 
 ## 2. The two editor modes
 
-They share one pinned frontend build but run in different containers.
+Local is the V1 mode. The collaborating mode is retained as a deferred option, not built in the CRM sequence. They share one pinned frontend build but run in different containers.
 
-| | Local workspace editor | Collaborating workspace editor |
+| | Local workspace editor (V1) | Collaborating workspace editor (deferred) |
 |---|---|---|
 | Users | One | Two or more in a shared workspace |
 | Host | The client app — Electron or the local web host | `DocService` on the shared machine |
@@ -38,7 +40,13 @@ Local mode is the openadvo/advdsh pattern: the editor is embedded and no server 
 
 Do not mix files between the two builds. The desktop package and the server package are both 9.3.8, but they are compiled separately; copy `web-apps`, `sdkjs` or `x2t` between them and saves can corrupt.
 
-**Peer-hosted sharing.** Any client can host. When a user shares a workspace, that client starts the bundled server pack, binds the host page and `DocService` to the LAN, and issues an invitation carrying host, port and a one-time token. The other user joins from their own client. When the last participant leaves or the host stops sharing, the server pack stops. A share is a session, not a service: the host's app must stay open and the machine awake.
+### 2.1 V1 sequential editing
+
+The embedded editor opens a committed base version under an `editing_session` lease. The lease holder is the only user who may save. Another user who opens the document gets the latest committed version read-only.
+
+A save carries the lease id, base version, base hash and an idempotency key. The API locks the document row, verifies the lease and base, stores the blob and creates an immutable `document_version`. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`. The lease is released on close, expires on a missed heartbeat or is revoked by a Matter `lead`. There is no server checkpoint and no live buffer.
+
+**Peer-hosted sharing (deferred).** Any client could host. When a user shares a workspace, that client starts the bundled server pack, binds the host page and `DocService` to the LAN, and issues an invitation carrying host, port and a one-time token. The other user joins from their own client. When the last participant leaves or the host stops sharing, the server pack stops. A share is a session, not a service: the host's app must stay open and the machine awake. This paragraph is retained for the deferred option and is not a V1 requirement.
 
 ---
 
@@ -51,7 +59,7 @@ Euro-Office publishes deb/rpm packages and a container image for 9.3.8. **It pub
 - `document-server-package/exe` - an Inno Setup recipe with WinSW service definitions and a prerequisite list (PostgreSQL 18.1 in the recipe; we pin 17.12, Redis 7.4, Erlang + RabbitMQ 4.2.1, OpenSSL, VC redists). That is the recipe's list, not this plan's; we use neither RabbitMQ nor Redis.
 - `Makefile` Windows branches (`PLATFORM := win`, `EXEC_EXT := .exe`).
 
-Option B therefore runs the Euro-Office Node services from source on Windows. That combination is not vendor-published, so we own it: pinned versions, a smoke test after every change, and no expectation of upstream Windows fixes. The Inno recipe stays available if a packaged installer is wanted later; it would be built from these same Euro-Office files.
+For the deferred shared mode, Option B runs the Euro-Office Node services from source on Windows. That combination is not vendor-published, so we would own it: pinned versions, a smoke test after every change, and no expectation of upstream Windows fixes. V1 does not run those services; it uses the DesktopEditors package and `x2t`. The Inno recipe stays available if a packaged installer is wanted later; it would be built from these same Euro-Office files.
 
 ---
 
@@ -86,6 +94,20 @@ Size: **1,163.8 MB** from 1,931.4 MB.
 ---
 
 ## 5. Runtime topology
+
+V1 is local:
+
+```
+Electron
+  ├─ React workspace
+  ├─ embedded Euro-Office editor
+  ├─ x2t.exe + DLLs + AllFonts.js + font_selection.bin
+  └─ MavrykX API / PostgreSQL / blob store
+```
+
+No `DocService`, no `FileConverter`, no editor queue and no server pack process runs. The editor saves through the API.
+
+The shared topology below is **deferred** and is not part of V1.
 
 ```
 Electron main process (supervisor)
@@ -191,7 +213,9 @@ The JWT secret is shared with MavrykX's server and never sent to the browser exc
 
 ## 8. Integration contract
 
-The editor contract is the one the Euro-Office `document-server-integration` examples implement; MavrykX reimplements it in its own server rather than running the example app.
+The shared-session contract below is **deferred**. V1 uses the local editor contract: open a committed base under a lease, edit in-process, save bytes to the MavrykX API with the lease and base hash, receive a new immutable version.
+
+The deferred editor contract is the one the Euro-Office `document-server-integration` examples implement; MavrykX would reimplement it in its own server rather than running the example app.
 
 1. **Open.** MavrykX serves a host page for one document. The page loads `api.js` from `DocService` and calls `DocsAPI.DocEditor(id, config)`.
 2. **Config.** `document.url` is a short-lived, single-use download URL; `callbackUrl` is MavrykX's callback; `document.key` identifies the document and revision; the whole config is signed as a token.
@@ -220,13 +244,13 @@ The intended workflow — "user tells the agent to approve all changes" — is p
 
 An agent without a grant can propose, diff and request. It cannot accept, commit or approve. A tool-schema check is not the lock; the server is.
 
-In shared mode, only the admin lawyer role can grant approval for another user's changes. In local mode the sole user grants their own, and the record still exists.
+In a multi-user Matter, a `lead` or `approver` reviews and approves; the author does not approve their own submission where another eligible reviewer exists. In a one-person firm the sole practitioner may self-approve, recorded as a self-review with the same version hash and audit. An agent never approves.
 
 ---
 
 ## 10. Verification
 
-The eleven checks from the packaging analysis, plus two mode checks:
+V1 checks:
 
 1. Open and edit DOCX; styles, tables, numbering and headers survive.
 2. Save and reopen DOCX in Word.
@@ -236,23 +260,29 @@ The eleven checks from the packaging analysis, plus two mode checks:
 6. Font list loads; no missing-font errors.
 7. DOCX → PDF and XLSX → PDF through `x2t`.
 8. Local mode: editor opens offline with no services running.
-9. Shared mode: two browsers edit one document, see each other's changes and authorship.
-10. A stale agent proposal never overwrites a live session.
-11. A save callback from an unknown or expired key is rejected.
-12. An agent without a grant cannot accept or commit.
-13. An approval grant is single-use and expires.
+9. Two users open one document; the first holds the edit lease and the second reads the latest version.
+10. A save creates one immutable version; the second user sees it on refresh.
+11. A save against a moved base is refused with `DOC_STALE_BASE`; no version is created.
+12. A lease expiry or revocation refuses the old holder's next save.
+13. Compare two versions read-only; restore an old version as a new version.
+14. A stale agent proposal never overwrites a human save.
+15. An agent without a grant cannot commit or approve.
+16. An approval is single-use, expires and is bound to the version hash; a return reopens the task without deleting the version.
+17. No `DocService`, hosted DocumentServer or Docker process is required.
+
+The deferred shared-session checks are: two browsers edit one document in a live session; a callback from an unknown key is rejected; the shared host survives a browser refresh. They are not V1 gates.
 
 ---
 
 ## 11. Risks
 
 - **Version coupling.** `web-apps`, `sdkjs` and `x2t` must be the same 9.3.8 build. Mixing corrupts saves. Pin all three and verify on every change.
-- **From-source Windows run.** Not vendor-tested. Own the smoke test.
+- **From-source Windows run (deferred shared mode).** Not vendor-tested. Own the smoke test.
 - **Compiled dependencies.** `sharp` usually has Windows binaries; `oracledb` is unused with PostgreSQL; `nodehun` is skipped.
-- **The queue adapter is ours.** It is tested but not upstream-tested. Re-run `test/smoke.js` after every Euro-Office upgrade, and review `schema.sql` before applying it to an existing database.
-- **Shared host availability.** A shared session dies if the host sleeps or reboots. Use the always-on machine.
-- **Network exposure.** Bind to the LAN, terminate TLS in MavrykX, keep the token secret server-side, issue short-lived single-use URLs.
-- **Permissions are UX.** The editor setting does not authenticate anyone; the URL and callback do.
+- **The queue adapter is ours (deferred shared mode).** It is tested but not upstream-tested. Re-run `test/smoke.js` after every Euro-Office upgrade, and review `schema.sql` before applying it to an existing database.
+- **Shared host availability (deferred).** A shared session dies if the host sleeps or reboots. Use the always-on machine.
+- **Network exposure (deferred).** Bind to the LAN, terminate TLS in MavrykX, keep the token secret server-side, issue short-lived single-use URLs.
+- **Permissions are UX.** The editor setting does not authenticate anyone; the API lease, base hash and RLS do.
 - **Fonts.** Without generated `AllFonts.js` and `font_selection.bin`, pagination and PDF output drift from Word.
 - **Windows edges.** Case-only name collisions, paths over 260 characters, spaces and non-English names, antivirus scanning large DLLs, file locks on save.
 
@@ -260,20 +290,31 @@ The eleven checks from the packaging analysis, plus two mode checks:
 
 ## 12. Build order
 
+V1, in the CRM document step:
+
 1. PostgreSQL 17.12 native on a free port (the example uses 5432), role and database created. The current 18.1 instance on 5433 is a development convenience; CI and the installer use 17.12.
-2. Apply the adapter schema; no broker and no Erlang.
-3. Node 22 runtime for the services.
-4. Reduced shared tree staged and verified against the 9.3.8 pins.
-5. `local.json`, service definitions, start and stop scripts.
-6. `DocService` and `FileConverter` up; health check on :8000.
-7. Host page and callback in MavrykX; one DOCX opened in a browser.
-8. Tracked change, approval grant, commit, immutable version.
-9. Local mode: same editor embedded, `x2t` local, no services.
-10. Run the verification list, then reduce nothing further without re-running it.
+2. Reduced local editor tree staged and verified against the 9.3.8 pins.
+3. `x2t.exe` local; DOCX round-trip and PDF conversion pass.
+4. Embedded editor opens a committed base under an edit lease.
+5. Save creates an immutable version; the current pointer moves; audit records the actor and hashes.
+6. Two-user sequential editing and stale-save refusal.
+7. Compare and restore; approval reset.
+8. Tracked changes, approval grant, commit, review return.
+9. Run the V1 verification list, then reduce nothing further without re-running it.
+
+The shared-session build (PostgreSQL adapter schema, Node 22 services, `DocService`, `FileConverter`, host page, callback) is deferred and is not part of the CRM sequence.
 
 ---
 
 ## 13. Open items
+
+V1:
+
+- Confirm the local editor package and `x2t` are the same 9.3.8 build on every installer.
+- Choose the version-comparison implementation; it reads immutable versions and never writes a version.
+- Confirm the lease heartbeat and expiry defaults with a real two-user session.
+
+Deferred shared session:
 
 - Confirm the shared host is the always-on machine, not a laptop.
 - Confirm the adapter passes `test/smoke.js` on the target machine before the first share.
