@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +11,7 @@ import asyncpg
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from migrations.baseline import BASELINE, SHA256
+from migrations.baseline import BASELINE, SHA256, digest
 from tools.findings import Finding
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +28,7 @@ class _Database:
 def check() -> list[Finding]:
     findings: list[Finding] = []
 
-    if hashlib.sha256(BASELINE.read_bytes()).hexdigest() != SHA256:
+    if digest(BASELINE.read_bytes()) != SHA256:
         findings.append(
             Finding(
                 "E8",

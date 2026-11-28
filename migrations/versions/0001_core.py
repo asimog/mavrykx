@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-
 from alembic import op
 
-from migrations.baseline import BASELINE, SHA256
+from migrations.baseline import BASELINE, SHA256, digest
 from migrations.sql_script import split_statements
 
 revision = "0001"
@@ -17,7 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     source = BASELINE.read_bytes()
-    if hashlib.sha256(source).hexdigest() != SHA256:
+    if digest(source) != SHA256:
         raise RuntimeError(
             "baseline SQL changed; add a forward-only revision and update migrations/baseline.py"
         )
