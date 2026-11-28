@@ -1,6 +1,6 @@
 # MavrykX — repository scaffold
 
-**Status:** approved · **Version:** 1 · **Date:** 2026-11-26
+**Status:** approved · **Version:** 1 · **Date:** 2026-11-28
 
 The shape of the repository once code exists. It is a plan, not an implementation; no application
 code is created by this document.
@@ -72,7 +72,7 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | Task runner | `just` | pinned in CI | wraps `tools.verify` |
 | Observability | `logfire` | `6.0.1` | optional, development only |
 | Build runtime | Node | `26.13.1` | build and tooling only; not the Electron ABI |
-| Editor | Euro-Office | `9.3.8` | DesktopEditors and DocumentServer |
+| Editor | Euro-Office | `9.3.8` | DesktopEditors and DocumentServer; V1 runs the local editor only |
 
 ### Pinning rules
 

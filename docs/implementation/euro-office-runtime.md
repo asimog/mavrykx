@@ -1,10 +1,11 @@
 # MavrykX — Euro-Office runtime package
 
-**Status:** proposal · **Version:** 9.3.8 · **Date:** 2026-11-26
+**Status:** proposal · **Version:** 9.3.8 · **Date:** 2026-11-28
 
 Measured analysis of Euro-Office 9.3.8 reduced to the smallest reliable set for Word,
-Spreadsheet, PDF, DOCX/XLSX/PDF conversion, font discovery and the co-editing
-DocumentServer. No presentation support.
+Spreadsheet, PDF, DOCX/XLSX/PDF conversion and font discovery. The DocumentServer measurements
+are retained for the deferred shared-session option; V1 runs the local editor and `x2t` only.
+No presentation support.
 
 Every number below is measured from the published 9.3.8 assets, not estimated. Sizes are MiB.
 

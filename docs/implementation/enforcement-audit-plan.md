@@ -1,6 +1,6 @@
 # MavrykX — Engineering enforcement audit
 
-**Status:** approved · **Version:** 1 · **Date:** 2026-11-26
+**Status:** approved · **Version:** 1 · **Date:** 2026-11-28
 
 Approved. Every rule is a check with a negative fixture; prose is not the gate.
 
@@ -20,7 +20,7 @@ The complete stack, with the pin that owns each runtime, is in
 - Extras are part of the pin: `coder`, `codemode`, `skills`, `dynamic-workflow`, `pgtask`, `logfire`.
 - Python is `>=3.14,<3.15` with `uv.lock`; PostgreSQL is `17.12`; Electron 45.5.0 carries its own
   Node ABI, separate from the build Node 26.13.1.
-- Euro-Office is `9.3.8`, both DesktopEditors and DocumentServer.
+- Euro-Office is `9.3.8`, both DesktopEditors and DocumentServer; V1 runs the local editor and does not start DocumentServer.
 
 The lockfile is the evidence. A prose version that disagrees with the lock is a defect.
 
@@ -41,20 +41,20 @@ The lockfile is the evidence. A prose version that disagrees with the lock is a 
 There is no Spec Kit pipeline. The repository uses the Matt Pocock flow and GitHub Issues for specs,
 tickets and implementation; there is no `specs/` tree.
 
-There are no lint, type, test or CI configurations yet. Nothing exists to retain beyond the design
-documents and the SQL appendix.
+The scaffold now provides the lockfile, operation registry, `tools.verify`, boundary checks and
+negative fixtures. The rule catalogue below remains the target for the first product modules.
 
 ---
 
-## 3. Missing controls
+## 3. Controls still being wired
 
-- No code, lockfile, package manifests or tool configuration.
-- No operation registry, so “CLI, HTTP and tool call the same operation” is untested.
-- No table-ownership manifest or generated schema.
-- No comment policy check; no Markdown policy check.
-- No negative fixtures, so every rule is unproven.
-- No harness-neutral command and no CI gate.
-- No type framework for identities, states or approvals.
+- The workspace rules D5, D6 and E9–E13 have no product module yet; they are wired with the CRM.
+- Table-ownership coverage must be extended as each module adds tables; the baseline manifest is not
+  the final one.
+- The type framework exists for identities and states; `RevisionToken`, `SectionId` and the workspace
+  DTOs are added with the first CRM module.
+- No product module exists yet. The first is firm, users, memberships and roles; the scaffold is not
+  the product.
 
 ---
 
@@ -74,7 +74,7 @@ flowchart TB
   INFRA[Infrastructure adapters]
   PG[(PostgreSQL + RLS)]
   BLOB[(Blob store)]
-  EO[Euro-Office DocumentServer]
+  EO[Euro-Office local editor / x2t]
   AGENT[Pydantic AI Agent<br/>Harness capabilities]
 
   CLI --> APP
@@ -143,6 +143,8 @@ and assert a failure that names the rule.
 | D2 | Agent surface offers a human-only action | Tool catalog | allowlist + operation metadata | Mark human-only; do not register a tool | Fixture registering `approve` as a tool fails |
 | D3 | Two copies of an allowlist | Capabilities | generated subset + drift test | Declare once; derive subsets | Hand-edited copy fails |
 | D4 | Unreadable policy allows | Policy loader | deny-by-default test | Fail closed with a visible error | Corrupt policy fixture returns deny |
+| D5 | Private resource readable by a peer or by firm admin role | Access, services, RLS | negative fixtures per resource | Owner-only (assignee for a private task); RLS re-check | A peer or non-member admin read returns nothing |
+| D6 | Section move changes access | Documents, access | negative fixture | Section is arrangement only | A moved document keeps its grants and restrictions |
 
 ### E. Records and operations
 
@@ -156,6 +158,11 @@ and assert a failure that names the rule.
 | E6 | Contract drift | API, tools, CLI | `tools/contracts_drift.py` | Generate from one source | Hand-edited generated file fails |
 | E7 | Docs disagree with code | Docs | version table vs lock; route vs docs | Fix code or doc in the same change | Mismatched pin fails |
 | E8 | Model and migration drift | Schema | `alembic check` | Change the model and add a revision in one commit | A model field without a revision fails |
+| E9 | Workspace write without audit | Services | integration test on the audit chain | Append the event in the transaction | Note/task/event/section write without an event fails |
+| E10 | Stale revision applied | Services | revision-token test | Compare inside the transaction; `RESOURCE_STALE` | A note or task write from an old token fails |
+| E11 | Stale document base creates a version | Documents | edit-lease and base-hash test | Lock, verify, refuse `DOC_STALE_BASE` | Two saves from the same base create one version |
+| E12 | Review decided by the author where another reviewer exists | Approvals | role and actor test | `lead`/`approver`, not the author | Author decision is refused |
+| E13 | Retry duplicates a version, message or approval | Services | idempotency-key test | Return the prior result | Double invoke creates one record |
 
 ---
 
@@ -220,11 +227,14 @@ No script may auto-delete or rewrite a document. A failure reports the path and 
 
 Distinct types, not one universal model.
 
-- **Identity:** `MatterId`, `PartyId`, `ProceedingId`, `ForumId`, `DocumentId`,
-  `DocumentVersionId`, `TaskId`, `RunId`, `ApprovalId`, `AuditEventId`. Each is a frozen
-  `RootModel[UUID]`, so a `MatterId` cannot be passed where a `ForumId` is expected.
-- **States:** `OcrState`, `VerificationState`, `DraftState`, `ApprovalState`, `GateState`,
-  `RunState` as `Literal` unions. Invalid transitions are unrepresentable.
+- **Identity:** `MatterId`, `PartyId`, `ProceedingId`, `ForumId`, `SectionId`, `DocumentId`,
+  `DocumentVersionId`, `NoteId`, `TaskId`, `ConversationId`, `MessageId`, `RunId`, `ApprovalId`,
+  `AuditEventId`. Each is a frozen `RootModel[UUID]`, so a `MatterId` cannot be passed where a
+  `ForumId` is expected.
+- **States:** `OcrState`, `VerificationState`, `DraftState`, `ApprovalState`, `GateState`, `RunState`,
+  `EditLeaseState` and `Visibility` as `Literal` unions. Invalid transitions are unrepresentable.
+- **Revisions:** `RevisionToken` is opaque to the caller and bound to the resource; a write carries
+  the token it read. Documents additionally carry `DocumentVersionId` and a base hash.
 - **Classification:** a discriminated union by `kind` (`Subject`, `Forum`, `Jurisdiction`,
   `PracticeArea`, `ProceedingType`, `Relief`, `ImpugnedDecision`, `Stage`) with evidence and
   confirmation state on each member.

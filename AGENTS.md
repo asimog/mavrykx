@@ -17,7 +17,7 @@ The design is not a claim that the product exists.
 - [`docs/v1/schema/0001_core.sql`](docs/v1/schema/0001_core.sql) and [`0002_rls_test.sql`](docs/v1/schema/0002_rls_test.sql) — the SQL appendix.
 - [`docs/implementation/repo-scaffold.md`](docs/implementation/repo-scaffold.md) — repository shape, pins, verification command.
 - [`docs/implementation/enforcement-audit-plan.md`](docs/implementation/enforcement-audit-plan.md) — rules, checks and negative tests.
-- [`docs/implementation/eurooffice-integration-plan.md`](docs/implementation/eurooffice-integration-plan.md) — editor modes and service topology.
+- [`docs/implementation/eurooffice-integration-plan.md`](docs/implementation/eurooffice-integration-plan.md) — local editor, sequential editing and deferred shared-session topology.
 - [`docs/implementation/euro-office-runtime.md`](docs/implementation/euro-office-runtime.md) — package reduction and licence findings.
 - [`vendor/euro-office/pg-adapter/README.md`](vendor/euro-office/pg-adapter/README.md) — the PostgreSQL queue adapter.
 
@@ -30,6 +30,9 @@ in the document where they apply. Sources are cited inline where relevant.
 - Pydantic for contracts; Pydantic AI for the agent; the Pydantic AI Harness for agent machinery.
 - PostgreSQL authoritative; content-addressed blobs for bytes; the queue is PostgreSQL.
 - One agent, Maverick. Sub-agents are tools, not peers.
+- CRM foundations first; the AI legal harness second.
+- One firm with multiple users; a client may have many Matters.
+- One shared Matter workspace; sequential document editing. No real-time co-editing in V1.
 - Self-hosted per firm; one installation serves one firm.
 - Human approval for commit, filing, send, grant, delete.
 - DOCX/PDF is the work product; chat is not a legal record.
@@ -37,8 +40,9 @@ in the document where they apply. Sources are cited inline where relevant.
 - Indian forums only.
 - One application-service layer; CLI, HTTP and agent tools call it.
 - No conflict-check subsystem; the matter-open gate records client and scope.
-- Euro-Office 9.3.8 is the editor. Every client installs the server pack; only a shared session runs it.
+- Euro-Office 9.3.8 is the editor. V1 runs the local editor and `x2t`; the server pack is installed but not started.
 - No RabbitMQ, Erlang, Redis, Nextcloud or CommunityServer as part of the record path.
+- No hosted DocumentServer and no Docker dependency in V1.
 
 ## Laws for design content
 
@@ -48,33 +52,37 @@ in the document where they apply. Sources are cited inline where relevant.
 - Every service write calls the audit append.
 - Unknown is a result: an unverified rule or citation is `unconfirmed`, never `passed`. Only deterministic checks verify citations; a model may only propose one.
 - No conflict-check subsystem.
-- Stateless execution, one authoritative record: runs execute on the advocate's node; every tool call crosses the live session to the server's one gateway; access is standing until revoked; commits, approvals and decisions are server transactions; the file cache is derived.
+- Stateless execution, one authoritative record: runs execute on the advocate's node; every tool call crosses the authenticated API session to the server's one gateway; access is standing until revoked; commits, approvals and decisions are server transactions; the file cache is derived.
 - Positions, evidence assessments, exhibit numbers and registry identity are append-only attributed records; status columns are derived.
 - Approval friction sits only on irreversible boundaries: commit, filing-ready, send, grant, delete. `doc_apply` is tracked and reversible and gets batch review. A gate is never weakened for speed.
 - Every agent-drafted document and filing set references the task or decision that authorised it.
+- Every workspace resource has one Matter, one owning module, a visibility rule and an audit event. A section is arrangement, not a second container.
+- One edit lease per document; only the holder saves; a save is base-bound and a stale save is refused. No silent overwrite.
+- A private note, private task or private conversation is owner-only; a firm admin is not a Matter bypass.
+- Review is human and hash-bound; an agent cannot approve its own work or delete a resource.
 - No data migration from a prior product: one baseline schema, forward-only numbered migrations before pilot data.
 - Prose does not enforce: boundaries, isolation, catalog parity and bundle evals are CI checks.
-- Installed is not running: the server pack is present on every client; starting it is a shared-session act.
+- Installed is not running: the server pack is present on every client; V1 does not start it.
 - The editor is not the record. Euro-Office renders; `x2t` converts; the builder is the only writer; `lxml` reads for verification.
 - A run workspace is not the Matter and not the record. Scratch files are scoped, owned, limited and deletable; legal versions are none of those.
 - One runtime pin: the harness pins the agent runtime. No second harness, no second agent loop, no second schema language.
 
 ## Domain vocabulary
 
-Matter ≠ proceeding · hearing ≠ order · fact ≠ evidence · document ≠ version · authority ≠ citation · task ≠ deadline · decision, approval and gate are different · an application nests inside a matter or proceeding and is never a sub-matter · the server is the shared-record spine; execution is stateless and local.
+Matter ≠ proceeding · client ≠ contact · hearing ≠ order · fact ≠ evidence · document ≠ version · authority ≠ citation · task ≠ deadline · assignment is a task's assignee and due date · submission is task + version + approval · review and approval are different · decision, approval and gate are different · a section is arrangement, not a workspace · an application nests inside a matter or proceeding and is never a sub-matter · the server is the shared-record spine; execution is stateless and local.
 
-Rejected entities: `action`, `assignment`, sub-matter, per-matter databases, a conflict-check subsystem, Workspace/Project.
+Rejected entities: `action`, `assignment` as a separate entity, sub-matter, per-matter databases, a conflict-check subsystem, Workspace/Project.
 
-Out of scope: time/billing, teams, client portal, multi-tenant SaaS.
+Out of scope: time/billing, teams, client portal, multi-tenant SaaS, real-time co-editing in V1.
 
 ## Matter management versus legal intelligence
 
-- **Matter management** is the Clio-shaped substrate: firm, people, clients, Matters, parties, tasks, dates, notes, documents and access. It works with notes alone.
+- **Matter management** is the Clio-shaped substrate: firm, people, clients, Matters, parties, sections, notes, tasks, assignments, events, documents and access. It works with notes alone.
 - **Litigation management** is Proceedings, applications, hearings, orders, forum adapters and filings.
 - **Legal intelligence** is classification, corpus, case law, library, research, evidence, drafting and verification.
 - **Agent and automation** is runs, tools, browser and workflows.
 
-Do not force legal intelligence into matter creation.
+Build the Matter-management substrate first, then litigation, legal intelligence and the agent. Do not force legal intelligence into matter creation. Do not make the CRM wait for the agent.
 
 ## SQL appendix
 
@@ -110,16 +118,17 @@ The full pinned table is in [`docs/implementation/repo-scaffold.md`](docs/implem
 
 ## Editor modes
 
-- **Local.** The client embeds the Euro-Office frontend and `x2t`. No `DocService` process. Saves go through the MavrykX API.
-- **Shared.** A client or the firm server starts `DocService`, `FileConverter` and the PostgreSQL queue; peers connect over the LAN. The host is the session authority while the session lasts.
+- **Local (V1).** The client embeds the Euro-Office frontend and `x2t`. No `DocService` process. Saves go through the MavrykX API under a single edit lease.
+- **Shared live session (deferred).** A client or the firm server could start `DocService`, `FileConverter` and the PostgreSQL queue; peers would connect over the LAN. This is not V1, not started by the CRM and not required for multi-user collaboration.
 - The same 9.3.8 build serves both; do not mix `web-apps`, `sdkjs` or `x2t` from different releases.
+- No hosted DocumentServer and no Docker dependency in V1.
 
 ## Tooling
 
 - There is no second spec pipeline. Matt Pocock's flow and GitHub Issues are the only process for specs, tickets and implementation.
 - Matt Pocock's skills are vendored at `.agents/skills/`, pinned in `skills-lock.json`. They are working discipline, not design authority.
 - One command is the gate: `python -m tools.verify --fast` for the edit loop, `--full` in CI. Hooks are convenience. The adapter's `node test/smoke.js` still proves the queue.
-- The enforcement plan is approved and the scaffold exists. Application code starts with the first module after the spine is green; do not expand the adapter into application modules.
+- The enforcement plan is approved and the scaffold exists. Application code starts with firm, users, memberships and roles after the spine is green; do not expand the adapter into application modules.
 
 ## Agent skills
 

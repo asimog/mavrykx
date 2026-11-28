@@ -1,8 +1,10 @@
 # MavrykX — Detailed architecture
 
-**Status:** current · **Version:** v1 · **Date:** 2026-11-26
+**Status:** current · **Version:** v1 · **Date:** 2026-11-28
 
 MavrykX is a self-hosted legal-work platform. **Maverick** is its one agent. The Matter is the workspace; there is no separate Workspace or Project entity.
+
+The product is built in two stages: the legal CRM and shared Matter workspace first, Maverick's AI Legal Harness second. The CRM is a complete multi-user product before the agent is wired in.
 
 The platform is a modular monolith with a firm server, Electron clients and authorised execution nodes. It is **not** a CRUD legal app with a chatbot, and it is **not** a multi-tenant SaaS.
 
@@ -14,6 +16,9 @@ The platform is a modular monolith with a firm server, Electron clients and auth
 - Pydantic for contracts; Pydantic AI for the agent; the Pydantic AI Harness for agent machinery.
 - PostgreSQL as the authoritative database; content-addressed blobs for bytes.
 - One agent, Maverick. Sub-agents are tools of that agent, not peer agents.
+- CRM foundations first; the AI legal harness second.
+- One firm with multiple users; a client may have many Matters.
+- One shared Matter workspace; sequential document editing. No real-time co-editing in V1.
 - Self-hosted per firm; one installation serves one firm.
 - Human approval for commit, filing, send, grant and delete.
 - DOCX/PDF is the work product; chat is not a legal record.
@@ -26,14 +31,14 @@ The platform is a modular monolith with a firm server, Electron clients and auth
 
 ## 2. Deployment shapes
 
-Installed and running are different facts. Every client installs the local editor and the server pack; only the local editor runs by default.
+Installed and running are different facts. Every client installs the local editor; the server pack is installed but is not started in V1.
 
 - **Local.** One local Python process runs `api` + `worker`. Bundled PostgreSQL. Electron on the same machine. The Euro-Office frontend and `x2t` are installed; no `DocService` process runs.
-- **Shared session.** Any client can host: when a workspace is shared, that client starts `DocService`, `FileConverter` and the PostgreSQL queue, and peers connect over the LAN. The firm server can host instead. The host is the shared-session authority while the session lasts.
-- **Firm LAN.** Firm server runs the Python roles and may run the shared-session service. PostgreSQL, blobs and editor session stores on the firm server. Electron on each desk.
+- **Firm LAN.** Firm server runs the Python roles. PostgreSQL and blobs live on the firm server. Electron on each desk; document editing is local and saves through the API.
 - **Firm remote.** Same firm server behind the remote connection service. No legal data at the relay.
+- **Shared live session — deferred.** For a future live co-editing decision, the server pack could run `DocService`, `FileConverter` and the PostgreSQL queue on the firm server or a sharing client on the LAN. That is not a hosted DocumentServer service. It is not part of V1, not started by the CRM, and not required for multi-user collaboration.
 
-The default installer is the shared-capable app: under 15 minutes and under 3.5 GB installed. A local-only build without the server pack stays under 1.5 GB. Redis is not used; the queue is PostgreSQL. Editor session stores are editor-session infrastructure, never legal stores.
+The default installer is the shared-capable app: under 15 minutes and under 3.5 GB installed. A local-only build without the server pack stays under 1.5 GB. Redis is not used; the queue is PostgreSQL. Editor session stores are editor-session infrastructure, never legal stores. V1 has no Docker dependency.
 
 ---
 
@@ -59,20 +64,13 @@ flowchart TB
     Q["Postgres job queue<br/>leases, heartbeats"]
   end
 
-  subgraph Editor["Euro-Office shared session — firm server or sharing client"]
-    DS["DocService + FileConverter"]
-    ES[("Editor session stores")]
-  end
-
   subgraph Data["Firm-controlled records"]
     PG[("PostgreSQL + RLS")]
     BL[("Blob store")]
   end
 
   UI --> API
-  ED -->|"Docs API / WOPI"| DS
-  DS --> ES
-  DS -->|"fetch base / save callback"| API
+  ED -->|"local edit; save bytes"| API
   AG -->|"tool calls"| API
   AG --> BD
   BD --> DOC
@@ -90,10 +88,10 @@ flowchart TB
 ```
 
 - **Record plane:** PostgreSQL with RLS, blobs, application services, one gateway, approvals and audit.
-- **Editing plane:** Euro-Office DocumentServer for shared live sessions, hosted by the firm server or the sharing client; the builder for agent/offline DOCX work; MavrykX owns identity, versions, permissions, approvals and audit.
-- **Execution plane:** stateless Maverick runs on a node. Every tool call crosses the live session to the gateway. The node has no local authority.
+- **Editing plane:** the Windows-native Euro-Office editor on the desktop, `x2t` for conversion and the builder for agent/offline DOCX work. MavrykX owns identity, versions, permissions, approvals and audit. No DocumentServer process is part of V1.
+- **Execution plane:** stateless Maverick runs on a node. Every tool call crosses the authenticated API session to the gateway. The node has no local authority.
 
-**The editor is not the record.** It gets no database credential and no version-creation path. It fetches a committed base by short-lived URL and returns saved bytes by callback.
+**The editor is not the record.** It gets no database credential and no version-creation path. It opens a committed base under an edit lease and returns saved bytes to the API; only the holder of the lease may save, and only against that base.
 
 ---
 
@@ -102,15 +100,15 @@ flowchart TB
 ### Matter management — the Clio-shaped substrate
 
 - `identity` — firm, user, membership, session, device, execution node.
-- `access` — matter membership, ethical wall, reuse grant, resource grant.
+- `access` — matter membership, ethical wall, reuse grant, resource grant, the one visibility policy.
 - `contacts` — contact, client.
-- `matter` — matter, parties, relations, notes, folder metadata.
-- `work` — tasks, task-document links, deadlines, appointments.
-- `documents` — document identity, versions, anchors, annotations, editing sessions, proposals.
+- `matter` — matter, parties, relations, notes.
+- `work` — tasks, assignments, task-document links, deadlines, appointments.
+- `documents` — sections/folders, document identity, versions, anchors, annotations, edit leases, proposals, compare and restore.
 - `storage` — content-addressed blobs.
 - `notifications` — notification and delivery state.
 
-This layer works with notes alone. It does not classify, research, draft or run agents.
+This layer works with notes alone. It does not classify, research, draft or run agents. Steps 1–6 of the build order deliver this layer; the agent modules are wired in step 7.
 
 ### Litigation and forums
 
@@ -132,13 +130,13 @@ This layer works with notes alone. It does not classify, research, draft or run 
 - `analysis` — issues, arguments and argument authorities.
 - `drafting` — render jobs; reads library templates. Owns no table.
 - `verification` — citation, quote, pinpoint, format, cross-reference and completion checks.
-- `approvals` — approval, gate, decision.
+- `approvals` — approval, gate, decision and the review queue read model.
 
 ### Agent and automation
 
 - `capabilities` — bundle, bundle version, skill.
 - `workflow` — Pydantic Graph definitions, versions, runs, steps and jobs. A playbook is a kind.
-- `harness` — conversations, messages, runs, events, context packages, run-bundle provenance.
+- `harness` — conversations and messages from step 5; runs, events, context packages and run-bundle provenance from step 7.
 - `browser` — user browser and separate headless agent browser; explicit control handoff.
 - `policy` — egress and capability policy.
 - `audit` — legal audit chain.
@@ -202,9 +200,9 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 ### Editor
 
-- Euro-Office DocumentServer **9.3.8** for shared sessions, whether hosted by the firm server or a sharing client.
-- Docs API is the live integration. WOPI is a file-access/locking fallback; it loses plugins, JWT restriction, toolbar control and paragraph-locking.
-- The local profile uses the vendored editor and builder; the server pack is installed, but no DocumentServer process runs until a workspace is shared.
+- Euro-Office **9.3.8** DesktopEditors for the V1 local editor. The DocumentServer build stays pinned and installed in the server pack, but no `DocService` process runs and no hosted DocumentServer or Docker dependency is introduced.
+- The integration is the embedded editor plus `x2t`; saves go through the MavrykX API. Docs API/WOPI shared-session integration is deferred with live co-editing.
+- The local profile uses the vendored editor and builder; the server pack is installed but not started by the CRM.
 
 ---
 
@@ -264,19 +262,20 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 ## 7. Editor and document authority
 
-- Human–human co-editing uses the Euro-Office DocumentServer in a shared session; the host may be the firm server or the sharing client.
-- Docs API is the live path; WOPI is a constrained fallback.
-- One active `editing_session` per document. It fences out-of-session commits with `DOC_SESSION_ACTIVE`.
-- Agents submit base-bound `document_proposal` rows; they do not join a live session.
-- The session save creates an immutable `document_version`. A checkpoint is derived; a crash can promote the last checkpoint to an unapproved `editor_recovery` version.
-- The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only. Reading for verification goes to the OOXML package directly (`lxml`), not through the editor API; the editor API is for rendering and editing, not a server-side parser.
-- The editor gets no database credential; the host owns identity, versions, permissions, approvals and audit.
+- V1 uses the embedded Windows-native Euro-Office editor and `x2t`; there is no shared live session and no `DocService` process.
+- One active `editing_session` is the edit lease. Only its holder may save. Another user who opens the document reads the latest committed version.
+- A save carries the lease, base version and base hash. The service locks the document row, verifies both, creates an immutable `document_version` and updates the current pointer. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`.
+- Agents submit base-bound `document_proposal` rows; they do not hold the human edit lease and cannot apply while it is active.
+- There is no server checkpoint and no `editor_recovery` version. A restore creates a new version from an old blob and resets approval.
+- The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only. Reading for verification goes to the OOXML package directly (`lxml`), not through the editor API.
+- The editor gets no database credential; MavrykX owns identity, versions, permissions, approvals and audit.
+- A future live co-editing decision may implement the same edit-lease and save seam. V1 does not add CRDT, OT, cursors or a second document authority.
 
 ---
 
 ## 8. Deployment and operations
 
-- Signed Windows installer for the desktop; signed Windows/Linux server installer; optional Docker.
+- Signed Windows installer for the desktop; signed Windows/Linux server installer. No Docker dependency; a development machine may use a disposable PostgreSQL container for tests, never the product.
 - Bundled PostgreSQL, localhost-only; clients talk to the API, never the database.
 - Blobs content-addressed; backup manifest pins DB snapshot, blobs and audit head.
 - Encrypted backups; dry-run restore; quarterly drill.
@@ -287,42 +286,65 @@ Versions checked on 2026-11-26. Pin exact versions.
 
 ## 9. Build order
 
-This is engineering sequence, not product releases.
+This is engineering sequence, not product releases. Steps 1–6 are the legal CRM and shared Matter workspace. Step 7 is Maverick's AI Legal Harness. Step 8 is the first end-to-end legal workflow.
 
-1. **Hard gates.** Install time/size (3.5 GB shared-capable, 1.5 GB local-only); DOCX tracked-change round trip; two-user peer-hosted co-editing spike; shared-host measurement; licence review; RLS negative tests; AG-UI interrupt; V1 schema/resource-grant delta; dependency checks; migration runner; scripted-model layer.
-2. **Solo loop.** One Delhi High Court civil Matter: notes-first, proceeding, documents with anchors, facts, one verified rule set, drafting, verification, completion contract, hash-bound approval, filing record. Classification and forum adapters are not required here.
-3. **Firm and legal intelligence.** Grants/walls; shared conversations; live sessions; classification; corpus; case law; library; Research Studio; forum adapters; browser; Pydantic Graph workflow creator; portal browser with download guards.
-4. **Remote and resilience.** VPN guide; backups and restore drills; node leases and revocation; durable engine only if the crash test fails.
-5. **Triggered work.** Custom relay; live agent editor participation; filing portal attempts/confirmation; teams; offline op-log.
+**Step 0 — verification spine (exists).** The scaffold, operation registry, boundary checks, baseline schema, RLS probes and `tools.verify` gate. Every later step keeps them green.
 
-**Do not start breadth before the solo loop completes.** A lawyer must finish a real brief on the loop without an engineer in the room.
+1. **Firm, users, memberships and roles.** Firm bootstrap, admin/lawyer/staff membership, Matter `lead`/`editor`/`viewer`/`approver`, sessions, devices and the audit actor. Gate: a firm admin without Matter membership reads no Matter content.
+2. **Clients, contacts and Matters.** Contact deduplication, client with many Matters, Matter open/close, the matter-open gate, parties and notes-first intake. Gate: a client with two Matters is isolated; a Matter can exist with a note and no client.
+3. **Shared Matter workspace and resource permissions.** Sections, membership, private/shared/restricted visibility, resource grants, walls, the one access policy, the workspace change feed and cross-resource audit. Gate: cross-Matter and private-content negative tests pass for every resource type.
+4. **Documents, Euro-Office, versions and audit.** Upload, local editor, edit lease, base-bound save, immutable versions, compare, restore, tracked changes, proposals and hash-bound approval. Gate: two users edit sequentially with no silent overwrite; a stale save is refused.
+5. **Notes, tasks, assignments, events and conversations.** Notes with headings, tasks and assignments, deadlines, appointments/hearings, conversations and messages, and research submissions as task + version + approval. Gate: every resource is attributed and audited.
+6. **Review and approval workflows.** Submission, supervisor review, approve/return, notifications, the review inbox and the document status transitions. Gate: an intern submits, a supervisor returns, a new version is submitted and approved; the original survives.
+7. **Maverick AI Legal Harness on the completed CRM.** Tool catalog, gateway, bundles, context assembly, runs, proposals, approvals and the agent UI. The harness calls the CRM services; it adds no legal authority and no second data path. Gate: an intern's agent reads only the intern's resources and cannot approve.
+8. **First end-to-end legal workflow.** Pleading ingestion → fact extraction → legal research → memo drafting → lawyer review. This is the first legal-intelligence proof, not the first build step. Gate: a lawyer completes the workflow on a real Matter, every citation is verified or `unconfirmed`, and the memo is approved by a human.
+
+**Do not start step 7 before steps 1–6 pass their gates.** The CRM is not a demo for the agent; the agent is a later participant in a working firm product. A lawyer must be able to run a Matter with documents, notes, tasks, events, conversations and review without a model in the room.
 
 ---
 
 ## 10. Acceptance gates
 
-- Two users edit one DOCX in one live session with comments, track changes and correct authorship.
-- An agent proposal against a stale base is detected and never overwrites the session.
+**CRM and shared workspace.**
+
+- A firm has an admin, at least two lawyers and a staff/intern; roles and Matter access are enforced; a firm admin outside the Matter reads nothing.
+- A client holds two Matters; documents, notes, tasks, events, conversations and approvals never cross the Matter boundary.
+- Two lawyers and an intern work in one Matter. Each sees the latest saved shared state and the attribution for every change.
+- One user holds the document edit lease; another reads the latest version; a stale save is refused; the next save creates one immutable version.
+- A lease expires or is revoked; the next user can edit; an old save does not overwrite the new version.
+- Version comparison is read-only; restoring an old version creates a new version and resets approval.
+- A private note and private conversation are invisible to every other Matter member, including a `lead` or `approver`; a private task is visible only to its creator and assignee.
+- An intern submits; the supervisor returns and later approves; the original version survives; every step is audited.
+- An agent proposal against a stale base is detected; it never overwrites a human save or the current version.
+- Every workspace resource write has an audit event; a missing event fails a fixture.
+- A document can be worked without a model, a run or a bundle. The CRM is complete before step 7.
+
+**Legal intelligence and agent.**
+
 - A matter with an ambiguous “Supreme Court case” folder does not become an SLP.
 - A primary-law instrument has a source, snapshot, version and reviewer; a stale rule is `unconfirmed`.
 - A case-law quote and pinpoint are verified deterministically.
 - A library item is admin-published and invisible without a grant.
 - A user browser and agent browser are separate; a handoff is visible and revocable.
 - A workflow run pins its definition version; a legal gate cannot be cleared by the graph.
+- An intern's agent inherits the intern's grants, cannot read a restricted document and cannot approve.
 - Import layers, table ownership, renderer isolation and no-god-file checks fail a broken fixture.
 
-**Schema smoke test (executed).** On PostgreSQL 17.12 + pgvector, `0001_core.sql` runs from empty and `0002_rls_test.sql` passes: 97 `app` tables, 0 without RLS, 0 `matter_id` tables without a policy; the isolation, wall, application-tree and audit-chain probes pass.
+**Schema smoke test (executed).** On PostgreSQL 17.12 + pgvector, `0001_core.sql` runs from empty and `0002_rls_test.sql` passes: 97 `app` tables, 0 without RLS, 0 `matter_id` tables without a policy; the isolation, wall, application-tree and audit-chain probes pass. The workspace step adds no table for a section; it uses `folder`. The private-note, private-task and private-trace policy narrowing is a forward migration and must land before those resources are exposed.
 
 ---
 
 ## 11. Deferred
 
+- Real-time co-editing, shared cursors, presence and simultaneous editing.
+- DocumentServer shared sessions and peer-hosted editor services.
 - Filing portal attempt/confirmation.
 - Live agent participation inside the editor.
 - Email as a first-class communication record.
 - External counsel guest accounts.
 - Firm-scoped Research Studio.
+- Teams, billing, time recording and a client portal.
 
-No architecture-level open decisions remain. Implementation details — forum adapter protocol, source list, sync cadence, browser handoff, licensing, workflow spec format, source ownership — are recorded in `docs/implementation/` and the owning module; they do not reopen the architecture.
+The CRM and workspace decisions are closed for V1. The live co-editing option is explicitly deferred; the edit-lease and save seam remains so it can be revisited without a second document authority. Implementation details — forum adapter protocol, source list, sync cadence, browser handoff, licensing, workflow spec format, source ownership — are recorded in `docs/implementation/` and the owning module; they do not reopen the architecture.
 
 The domain model is in [02-domain-model.md](02-domain-model.md). Application, agent and data are in [03-application-agent-and-data.md](03-application-agent-and-data.md). Shared collaboration is in [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md). The product surface is in [05-product-experience.md](05-product-experience.md).
