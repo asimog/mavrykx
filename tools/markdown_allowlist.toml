@@ -20,7 +20,7 @@ reason = "The approved enforcement plan: rules, checks and negative tests."
 
 [[file]]
 path = "docs/implementation/euro-office-runtime.md"
-reason = "The approved Euro-Office package reduction and licence findings."
+reason = "Euro-Office package reduction and licence findings (proposal)."
 
 [[file]]
 path = "docs/implementation/eurooffice-integration-plan.md"

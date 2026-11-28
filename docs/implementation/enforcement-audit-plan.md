@@ -12,17 +12,16 @@ Markdown may explain a rule; it may never be the check.
 
 ## 1. Stack and pins
 
-The complete stack, with the pin that owns each runtime, is in
-[`repo-scaffold.md`](./repo-scaffold.md) §1. The rules that matter here:
+The complete stack, exact pins and lockfile rules are in
+[`repo-scaffold.md`](./repo-scaffold.md) §1. This plan does not restate them. The enforcement-relevant
+constraints:
 
-- `pydantic-ai-harness==0.75.0` is the only declared agent-runtime pin. It requires
-  `pydantic-ai-slim==2.75.0`; `pydantic-ai` and `pydantic-graph` are never declared separately.
-- Extras are part of the pin: `coder`, `codemode`, `skills`, `dynamic-workflow`, `pgtask`, `logfire`.
-- Python is `>=3.14,<3.15` with `uv.lock`; PostgreSQL is `17.12`; Electron 45.5.0 carries its own
-  Node ABI, separate from the build Node 26.13.1.
-- Euro-Office is `9.3.8`, both DesktopEditors and DocumentServer; V1 runs the local editor and does not start DocumentServer.
+- One agent runtime: `pydantic-ai-harness==0.75.0`; `pydantic-ai-slim==2.75.0` is derived. Do not declare
+  `pydantic-ai` or `pydantic-graph` separately.
+- Python 3.14; PostgreSQL 17.12; Electron 45.5.0 carries its own Node ABI; the build Node is 26.13.1.
+- Euro-Office 9.3.8; V1 runs the local editor and does not start DocumentServer.
 
-The lockfile is the evidence. A prose version that disagrees with the lock is a defect.
+The lockfile is the evidence. A prose pin that disagrees with the lock is a defect.
 
 ---
 
@@ -32,29 +31,44 @@ The lockfile is the evidence. A prose version that disagrees with the lock is a 
 |---|---|---|
 | `docs/v1/` as the five-document design set | **Keep** | One owner per truth |
 | `AGENTS.md` laws | **Keep**, as rationale | Not enforcement; points at checks |
-| SQL appendix + RLS negative test | **Keep and extend** | Proven isolation; becomes a CI job |
-| Table-ownership rule | **Extend** | Becomes `tools/ownership.py` |
-| Layering rules in `01` §6 | **Extend** | Become import-linter and dependency-cruiser contracts |
-| “Prose does not enforce” | **Replace with checks** | This audit |
+| SQL appendix + RLS negative test | **Keep and extend** | CI migrates and runs the probes |
+| Table-ownership rule | **Extend** | The `ops.table_owner` manifest exists; `tools/ownership.py` is planned |
+| Layering rules in `01` §6 | **Extend** | Enforced today by import-linter and dependency-cruiser |
+| “Prose does not enforce” | **Replace with checks where wired** | The remaining rules are prose until their fixture exists |
 | Hand-written architecture review | **Keep** | Human judgement, not a gate |
 
 There is no Spec Kit pipeline. The repository uses the Matt Pocock flow and GitHub Issues for specs,
 tickets and implementation; there is no `specs/` tree.
 
-The scaffold now provides the lockfile, operation registry, `tools.verify`, boundary checks and
-negative fixtures. The rule catalogue below remains the target for the first product modules.
+Present today: `tools/markdown_policy.py`, `tools/comments.py`, `tools/operations.py`,
+`tools/schema.py`, `tools/negative.py`, import-linter, dependency-cruiser, ruff, mypy, ESLint and tsc.
+Planned: `tools/ownership.py`, `tools/court_leak.py`, `tools/contracts_drift.py`,
+`tools/docs_agree.py`, the no-god-file check and Electron E2E. The rule catalogue below is the target;
+the present checks are the subset above.
 
 ---
 
 ## 3. Controls still being wired
 
+- No product module exists yet. The first is firm, users, memberships and roles; the scaffold is not the
+  product.
 - The workspace rules D5, D6 and E9–E13 have no product module yet; they are wired with the CRM.
-- Table-ownership coverage must be extended as each module adds tables; the baseline manifest is not
-  the final one.
-- The boundary-contract framework exists; the identity and state types (`MatterId`, `RevisionToken`,
-  `SectionId`) and the workspace DTOs are added with the first CRM module.
-- No product module exists yet. The first is firm, users, memberships and roles; the scaffold is not
-  the product.
+- `tools/ownership.py`, `tools/court_leak.py`, `tools/contracts_drift.py`, `tools/docs_agree.py`, the
+  no-god-file check and Electron E2E are not implemented.
+- `modules/` has no import-linter contract yet; add it with the first module.
+- The type framework has boundary DTOs only; `MatterId`, `RevisionToken`, `SectionId` and the workspace
+  DTOs arrive with the first CRM module.
+- The baseline `ops.table_owner` manifest covers 95 `app` tables plus `audit.audit_event`; extend it with
+  every new table. The check is not wired.
+- The current revision changes the baseline and the RLS test but not `tests/integration/test_schema.py`:
+  the test still asserts probe 6 = 1 and audit `2|t`, while `0002_rls_test.sql` expects probe 6 = 0 and
+  audit 3. The Python test and the SQL script disagree; reconcile them and re-run CI.
+- The citation target is polymorphic (judgment version, instrument version/provision, document
+  version/anchor or external source). The baseline still points `citation` at `authority`; add the
+  explicit target columns and `judgment.neutral_citation` in a forward-only revision before the citation
+  feature ships.
+- Admin delegation has no `delegation` table or audit columns yet. Add them with identity/access.
+- Session revocation is mark-only (`revoked_at`); a retention/purge job is later work.
 
 ---
 
@@ -87,12 +101,11 @@ flowchart TB
   INFRA --> PG
   INFRA --> BLOB
   INFRA --> EO
-  APP -.reads via query ports.-> APP
 ```
 
-Rules: surfaces import application only; application imports domain and ports; infrastructure sits
-behind ports; the renderer imports the preload surface only; the agent imports tools, never a
-repository.
+Rules: HTTP and CLI import application only; tools import the gateway, which imports application;
+application imports domain and ports; infrastructure sits behind ports; the renderer imports the preload
+surface only; the agent imports tools, never a repository.
 
 ---
 
@@ -208,7 +221,8 @@ rule and the fix.
 | `alembic check` | E8 | SQLAlchemy metadata vs migration head, from the first model |
 | `tools/negative.py` | all | fixtures under `tests/negative/` |
 
-No script may auto-delete or rewrite a document. A failure reports the path and the required action.
+No script may auto-delete or rewrite a document. A failure reports the path and the required action. A
+script in this table is a target until it exists in `tools/`; the present/planned split is in §2.
 
 ---
 
@@ -216,10 +230,10 @@ No script may auto-delete or rewrite a document. A failure reports the path and 
 
 - `pyproject.toml` owns ruff, mypy, pytest, import-linter and the project metadata.
 - `eslint.config.js` and `tsconfig.json` are the only TypeScript authorities.
-- `.dependency-cruiser.js` owns the renderer and layer rules.
+- `.dependency-cruiser.cjs` owns the renderer and layer rules.
 - `tools/verify.py` is the only entry point; CI and agents call it, never the individual tools.
 - `tests/negative/` is part of the test suite, not a separate project.
-- Hooks call `python -m tools.verify --staged`; they are convenience only.
+- No hooks are installed. If added, they call `python -m tools.verify --fast`; they are convenience only.
 
 ---
 
@@ -256,8 +270,10 @@ No shared `Entity` interface. Each module owns its DTOs and its invariants.
 
 - **One command:** `python -m tools.verify`. OpenCode, Codex, Claude Code and a terminal run the
   same command. `AGENTS.md` mentions it; the check is the gate.
-- **Hooks are optional.** Pre-commit runs `--fast`; pre-push runs `--fast`; neither is trusted.
-- **CI is required.** The protected branch requires `--full`. A local bypass cannot merge.
+- **Hooks are optional.** No hook is installed. If one is added, it runs `--fast`; neither pre-commit nor
+  pre-push is trusted.
+- **CI is required.** The protected `main` branch requires the `verify` check; CI runs `--full`. A local
+  bypass cannot merge.
 - **Rule IDs in messages.** Every failure says `R3: extract the decision to the service`.
 - **No agent-specific config** is required for enforcement. An agent that never reads `AGENTS.md`
   still fails the same checks.
@@ -270,18 +286,20 @@ No shared `Entity` interface. Each module owns its DTOs and its invariants.
 
 | Stage | Command | Budget | Contents |
 |---|---|---|---|
-| Fast (edit loop) | `python -m tools.verify --fast` | < 30 s | Markdown policy, ruff, mypy on changed, eslint, tsc, boundaries, ownership, operations |
-| Full (PR) | `python -m tools.verify --full` | < 10 min | Fast + unit, hypothesis, integration, `alembic check`, `pip-audit` + `npm audit`, contract drift, negative suite, Electron E2E |
-| Release | `--full --release` | < 20 min | Full + schema from empty, RLS negative, packaged smoke test |
+| Fast (edit loop) | `python -m tools.verify --fast` | < 30 s | Markdown policy, comment policy, ruff, mypy, ESLint, tsc, import-linter, dependency-cruiser, operation parity |
+| Full (PR) | `python -m tools.verify --full` | < 10 min | Fast + pytest, negative fixtures, `pip-audit` + `npm audit`, `uv lock --check`, baseline/RLS schema check |
+| Release | `--release` | — | Not implemented; packaging and release checks arrive with the installer |
 
-Fast checks run where they cannot be skipped: CI on every push, and a required check on the merge
-queue. Hooks are a courtesy.
+CI runs `--full` on every pull request and push to `main`; the `verify` check is required on `main`. No
+merge queue is configured. Hooks are not installed. Fast checks are a local convenience; CI is the gate.
 
 ---
 
 ## 12. Negative-test plan
 
-Each rule has a fixture that must fail, and the test asserts the failure names the rule.
+Each rule must have a fixture that fails, and the test asserts the failure names the rule. The table is
+the target suite. The current fixtures cover C1–C3, A3, B1/B2/B3/B4/B6 and D2; the rest arrive with their
+rule.
 
 | Fixture | Expected |
 |---|---|
@@ -308,7 +326,10 @@ fixture is corrected.
 
 ---
 
-## 13. Phased implementation
+## 13. Enforcement rollout
+
+This is the enforcement rollout, not the product build order. P0–P3 and P6 are complete; P4, P5 and P7
+are partial. The product build order is in [01-architecture.md](../v1/01-architecture.md) §9.
 
 | Phase | Work | Exit |
 |---|---|---|

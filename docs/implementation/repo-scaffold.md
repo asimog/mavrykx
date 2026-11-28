@@ -1,15 +1,17 @@
 # MavrykX — repository scaffold
 
-**Status:** approved · **Version:** 1 · **Date:** 2026-11-28
+**Status:** current · **Version:** 2 · **Date:** 2026-11-28
 
-The shape of the repository once code exists. It is a plan, not an implementation; no application
-code is created by this document.
+The repository layout, pins and verification commands. The verification spine exists; the product
+module tree is planned. This document is not design authority.
 
 ---
 
 ## 1. Stack and pins
 
-One pin owns each runtime. The lockfile is the evidence, not the prose.
+One pin owns each runtime. The lockfile is the evidence, not the prose. The Python and Node packages
+installed today are in `pyproject.toml`, `package.json` and the lockfiles; a package absent from the
+lockfile is a target pin, not an installed dependency.
 
 | Layer | Package | Pin | Note |
 |---|---|---|---|
@@ -24,6 +26,7 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | DB | `sqlalchemy[asyncio]` | `2.1.9` | async ORM and migrations |
 | DB driver | `asyncpg` | `0.32.0` | |
 | Migrations | `alembic` | `1.20.1` | baseline `0001_core.sql`; forward-only |
+| Execution engine | `dbos` | `3.7.0` | optional behind `ExecutionEngine`; not installed |
 | CLI | `typer` | `0.29.3` | |
 | UI protocol | `ag-ui-protocol` | `1.0.0` | |
 | Telemetry | `opentelemetry-sdk` | `1.45.2` | |
@@ -65,11 +68,11 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | Forms | `react-hook-form` | `7.92.0` | with generated types |
 | OCR | `ocrmypdf` / `pytesseract` | `17.14.2` / `0.3.13` | local by default |
 | DOCX read | `lxml` | `6.1.3` | server-side read and verify; Euro-Office renders DOCX and PDF; the builder writes |
+| DOCX extract | `python-docx` | `1.2.0` | optional simple extraction; never the writer |
 | PDF text | `pypdf` | `7.2.0` | BSD; PyMuPDF is AGPL and not used |
 | Auth | `argon2-cffi` / `pyotp` | `25.1.0` / `2.12.1` | Argon2id and TOTP |
 | HTTP edge | `python-multipart` / `itsdangerous` / `cryptography` | `0.0.34` / `2.2.0` / `50.0.2` | uploads, signed URLs, device keys |
 | Email | `aiosmtplib` / `imap-tools` | `5.1.3` / `1.16.0` | deferred |
-| Task runner | `just` | pinned in CI | wraps `tools.verify` |
 | Observability | `logfire` | `6.0.1` | optional, development only |
 | Build runtime | Node | `26.13.1` | build and tooling only; not the Electron ABI |
 | Editor | Euro-Office | `9.3.8` | DesktopEditors and DocumentServer; V1 runs the local editor only |
@@ -80,7 +83,7 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
   `coder`, `codemode`, `skills`, `dynamic-workflow`, `pgtask`, `logfire`. Add provider extras to
   `pydantic-ai-slim`, never to `pydantic-ai`.
 - Do not declare `pydantic-ai`, `pydantic-ai-slim` or `pydantic-graph` as independent dependencies.
-  The harness pins the first two; the graph ships with the runtime.
+  The harness pins `pydantic-ai-slim`; the graph ships with the runtime.
 - Electron's bundled Node is the ABI for native modules in the main process. Node 26 is for Vite,
   ESLint and scripts only. Do not assume the two match.
 - Python and PostgreSQL are constraints plus a lock, not exact strings in prose.
@@ -99,6 +102,10 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 
 ## 2. Layout
 
+The tree is the target shape. Today `src/mavrykx` contains the layer packages and stubs, `apps/desktop`
+contains the Electron shell, and `modules/`, `tests/e2e/` and `tests/contracts/` are empty (the last two
+hold `.gitkeep`).
+
 ```text
 mavrykx/
 ├── pyproject.toml            # one Python project, uv-managed
@@ -109,7 +116,7 @@ mavrykx/
 ├── docs/
 │   ├── v1/                   # canonical design set (five documents + schema)
 │   ├── agents/               # tracker and domain-doc consumer rules
-│   └── implementation/       # approved working plans (not design authority)
+│   └── implementation/       # working plans (not design authority; status per document)
 ├── src/mavrykx/
 │   ├── domain/               # pure Python: entities, values, policies
 │   ├── application/          # use cases, transactions, authorisation, audit
@@ -166,7 +173,8 @@ Documents have four distinct jobs: Euro-Office renders DOCX and PDF; `x2t` conve
 writes; `lxml` reads the OOXML package for verification. The editor API is not a server-side parser.
 
 Public per module: `api.py`, `contracts.py`, `service.py`. Everything else is private. The
-table-ownership manifest names one owner per table.
+table-ownership manifest is `ops.table_owner` in the baseline; `tools/ownership.py` is the planned
+check.
 
 ### Design check
 
@@ -192,26 +200,34 @@ The shape is judged by Ousterhout's *A Philosophy of Software Design*:
 One command, harness-neutral:
 
 ```bash
-python -m tools.verify --fast     # seconds: lint, types, boundaries, docs, parity
-python -m tools.verify --full     # adds unit, integration, E2E, negative, drift
-python -m tools.verify --rule R2  # run one rule and its negative test
+uv run python -m tools.verify --fast     # seconds: docs, lint, types, boundaries, parity
+uv run python -m tools.verify --full     # adds tests, negatives, audits, schema/RLS
+uv run python -m tools.verify --rule E8  # one rule and its negative fixture
 ```
+
+`--fast` runs the Markdown policy, comment policy, mypy, TypeScript, ruff, ESLint, import-linter,
+dependency-cruiser and operation parity. `--full` adds pytest, the negative fixtures, `pip-audit` and
+`npm audit`, `uv lock --check`, and the baseline/RLS schema check. It requires a migrated disposable
+PostgreSQL 17.12 + pgvector database and `MAVRYKX_DATABASE_URL`. E2E, contract drift, table ownership,
+court leak and docs-agree are **not wired yet**.
 
 `tools/` contains:
 
-| Tool | Rule |
-|---|---|
-| `verify.py` | orchestrator; fast and full |
-| `markdown_policy.py` | approved files only, no `FINAL`/`V2`, no duplicates |
-| `ownership.py` | every table has exactly one owner |
-| `operations.py` | every operation has CLI, HTTP and tool surfaces, or a declared exception |
-| `comments.py` | AST-aware comment ban with the allowed exceptions |
-| `court_leak.py` | court names only in adapter data |
-| `contracts_drift.py` | generated contracts match their source |
-| `schema.py` | baseline digest, migration head and live RLS invariants |
-| `negative.py` | runs the fixtures that must fail |
+| Tool | Rule | State |
+|---|---|---|
+| `verify.py` | orchestrator; fast and full | present |
+| `markdown_policy.py` | approved files only, no `FINAL`/`V2`, no duplicates | present |
+| `comments.py` | AST-aware comment ban with the allowed exceptions | present |
+| `operations.py` | every operation has CLI, HTTP and tool surfaces, or a declared exception; no interface decisions | present |
+| `schema.py` | baseline digest, migration head and live RLS invariants | present |
+| `negative.py` | runs the fixtures that must fail | present |
+| `ownership.py` | every table has exactly one owner | planned |
+| `court_leak.py` | court names only in adapter data | planned |
+| `contracts_drift.py` | generated contracts match their source | planned |
+| `docs_agree.py` | pinned table agrees with the lockfiles | planned |
 
-CI runs `--full` on every pull request. Hooks are a convenience; they are never the gate.
+CI runs `--full` on every pull request and on pushes to `main`; `verify` is a required check on `main`.
+No hooks are installed. Hooks, if added, are a convenience; they are never the gate.
 
 ---
 
@@ -219,22 +235,28 @@ CI runs `--full` on every pull request. Hooks are a convenience; they are never 
 
 - `docs/v1/` is the only design authority. Five documents and the SQL appendix.
 - `docs/agents/` holds consumer rules for the engineering skills.
-- `docs/implementation/` holds approved plans. It is not design authority and must not restate it.
+- `docs/implementation/` holds working plans; status is per document. It is not design authority and
+  must not restate it.
 - A new Markdown file is a deliberate act: add it to the policy allowlist and say why in the same
   change.
 - No `FINAL`, `UPDATED`, `NEW` or `V2` names. Update the owner.
 
 ---
 
-## 6. Build order
+## 6. Verification-spine build order
 
-1. Scaffold the tree, `pyproject.toml`, `uv.lock`, `package.json`, `tools/verify.py` skeleton.
-2. Add the boundary checks: import-linter, dependency-cruiser, renderer isolation.
-3. Add the operation registry and the three surface adapters for one operation.
-4. Add the type framework and the contract drift test.
-5. Add the negative fixtures, one per rule.
-6. Wire CI to `--full`; keep hooks optional.
-7. Only then add the first real module.
+This is the scaffold order, not the product build order ([01-architecture.md](../v1/01-architecture.md)
+§9). State on 2026-11-28:
+
+| Step | Work | State |
+|---|---|---|
+| 1 | Scaffold the tree, `pyproject.toml`, `uv.lock`, `package.json`, `tools/verify.py` skeleton. | complete |
+| 2 | Add the boundary checks: import-linter, dependency-cruiser, renderer isolation. | complete |
+| 3 | Add the operation registry and the three surface adapters for one operation. | complete (`system.status`) |
+| 4 | Add the type framework and the contract drift test. | partial: boundary DTOs exist; generated contracts and `contracts_drift.py` do not. |
+| 5 | Add the negative fixtures, one per rule. | partial: fixtures cover C1–C3, A3, B1/B2/B3/B4/B6 and D2; one per rule is not complete. |
+| 6 | Wire CI to `--full`; keep hooks optional. | complete: CI runs `--full`; `verify` is required on `main`; no hooks are installed. |
+| 7 | Only then add the first real module. | next: firm, users, memberships and roles. |
 
 ---
 
@@ -243,4 +265,4 @@ CI runs `--full` on every pull request. Hooks are a convenience; they are never 
 - No second agent runtime, no second harness.
 - No second application-service layer, registry or orchestrator.
 - No generic framework; `tools/` is a small set of checks, not a platform.
-- No implementation before approval of the enforcement plan.
+- No product module before its design and specification are approved.

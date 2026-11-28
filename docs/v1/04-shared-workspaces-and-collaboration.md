@@ -12,29 +12,40 @@ Collaboration is multi-user and sequential. Lawyers, staff and interns work in o
 
 The Matter is the unit of confidentiality and the shared record. A document, note, task, assignment, event, conversation, research project or workflow run is scoped to it.
 
-**What is shared:** the Matter spine, the section tree, documents, notes, tasks and assignments, events, conversations, submissions, reviews, approvals, decisions, filings, activity and library items granted to the Matter. Every Matter member reads these resources.
+**What is shared:** the Matter spine, the section tree, documents, notes, tasks and assignments, events,
+conversations, submissions, reviews, approvals, decisions, filings, activity and the library items the
+user has been granted. Every Matter member reads the Matter-wide resources.
 
 **What is not shared:** a Matter is invisible to a non-member. A restricted document is invisible without a resource grant; the firm admin does not need the grant. A draft that has not been submitted and an unpublished library item are not part of the Matter record until they are saved or published.
 
-**No ethical walls. No conflict-check subsystem. No private resources.** The firm uses one simple hierarchy. A firm admin reads every Matter. The firm admin assigns Matter access to lawyers, staff and interns. Matter resources are Matter-wide; only a restricted document needs a separate grant.
+**No ethical walls. No conflict-check subsystem. No private resources.** The firm uses one simple hierarchy. A firm admin is a lawyer and reads every Matter. The firm admin or an authorised delegate assigns Matter access to lawyers, staff and interns. Matter resources are Matter-wide; only a restricted document needs a separate grant.
 
-**No second container.** A Workspace/Project would split the confidentiality unit and the record. The Matter already runs from first note to archive. A section is an arrangement row inside the Matter, never a container of authority.
+**No second container.** A Workspace/Project would split the confidentiality unit and the record. The
+Matter covers first note to archive. A section is an arrangement row inside the Matter, never a
+container of authority.
 
 ---
 
 ## 2. Firm roles and Matter access
 
-Firm roles are `admin`, `lawyer`, `staff` and `intern`. A firm admin is a lawyer who manages the firm. Matter access is `edit` or `view`. The firm admin assigns access.
+Firm roles are `admin`, `lawyer`, `staff` and `intern`. A firm admin is a lawyer, manages the firm and
+has access to every Matter. Matter access is `edit` or `view`. The firm admin assigns access and may
+delegate duties except promoting an admin; delegation never widens access.
 
 | Actor | Access |
 |---|---|
-| Firm admin | Reads and edits every Matter by role. Assigns Matter access. |
+| Firm admin | A lawyer. Reads and edits every Matter by role. Assigns Matter access. May delegate duties except promotion. |
 | Lawyer with Matter `edit` | Creates and edits Matter resources; submits work; reviews and approves where eligible. |
 | Lawyer with Matter `view` | Reads Matter resources and comments where the resource allows it. No edit or approval. |
 | Staff or intern with Matter `edit` | Creates and edits Matter resources; submits work. No firm administration. |
 | Staff or intern with Matter `view` | Reads Matter resources. No edit or approval. |
 
-An intern is a firm `intern`, not a lawyer. A junior lawyer is a firm `lawyer` with Matter `edit` or `view`. Approval authority comes from the firm admin or a lawyer role, not from seniority alone.
+An intern is a firm `intern`, not a lawyer. A junior lawyer is a firm `lawyer` with Matter `edit` or `view`. Approval authority comes from the firm admin, a lawyer role, or a delegate who is a lawyer, not from seniority alone.
+
+**Delegation.** An admin may delegate operational duties — access grants, reviews and settings — to a
+named user through an audited delegation. The delegate acts with their own role and Matter access;
+delegation never grants a non-lawyer legal approval. Only an admin may promote another admin. Every
+delegated act records the delegate and the delegator.
 
 Membership changes are audited. Revocation takes effect on the next operation: API session, edit lease, gateway call or RLS check.
 
@@ -55,7 +66,7 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 | Deadline | work | Matter-scoped time limit with a basis; the calendar is derived | Matter-wide | No |
 | Hearing | proceedings | Dated occurrence in a proceeding; the calendar is derived | Matter-wide | No |
 | Conversation / message | harness | Matter-scoped room and attributed turns | Matter-wide | No |
-| Research project | research | Matter-scoped plan, sources and findings | Matter-wide | Plan approval; submission via a memo version |
+| Research project | research_studio | Matter-scoped plan, sources and findings | Matter-wide | Plan approval; submission via a memo version |
 | Approval | approvals | Bound to one subject and hash | Follows the subject | Yes |
 | Decision | approvals | Human choice with options and rationale | Matter-wide | No |
 
@@ -94,30 +105,42 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 - A delete is a human act. An agent may propose one; it cannot execute it.
 - No hard delete while a legal hold exists.
 - A section never becomes a permission boundary.
+- A delegate may perform a firm-admin duty only within the delegation scope and their own access; the
+  audit records both.
 
 ---
 
 ## 5. Access rules
 
 ```text
-allow = firm admin
-        OR (matter membership AND resource access)
-        AND (for a restricted document) a live resource grant
-        AND (for an agent) the initiator's grants ∩ run scope ∩ bundle
-        AND (for an edit) the edit lease held by the actor
+read =
+  firm admin
+  OR (matter membership AND (not restricted OR live resource grant))
+
+agent read =
+  read AND initiator grants ∩ run scope ∩ bundle
+
+document edit =
+  read AND the actor holds the edit lease
 ```
 
-- A firm admin reads every Matter. A non-member reads no Matter.
+- A firm admin reads every Matter. A non-member reads no Matter. The firm-admin path bypasses the Matter
+  grant and the restricted-document grant, not the edit lease: a firm admin who edits a document still
+  holds the lease.
 - Matter membership is the outer boundary for every other user. There is no ethical wall.
-- A Matter `edit` member creates and edits Matter resources. A Matter `view` member reads them.
+- A Matter `edit` member creates and edits Matter resources. A Matter `view` member reads them and
+  comments where the resource allows it. A non-document edit uses the resource's revision check; only a
+  document takes the edit lease.
 - A restricted document needs a resource grant, except for the firm admin. The grant covers the document, its versions, text, anchors, annotations, relations and chunks.
 - A note, task, conversation or message has no private mode. Every Matter member reads it.
 - A section does not change access to the documents in it.
 - An agent inherits the initiating user, subject to the bundle. It never gains wider access because it is in a shared Matter.
+- A delegated act uses the delegate's own role and Matter access; delegation never widens access. The audit records the delegator.
 - An agent cannot approve its own work, clear a legal gate or delete a resource.
 - Revocation is enforced on the next operation: gateway, RLS, API session, edit lease.
 - The service checks it; RLS re-checks it. The UI is not the boundary.
-- The Matter access rule is declared once and reused by the service and RLS; the API and SQL expressions are bound by the same negative tests.
+- The Matter access rule is declared once and reused by the service and RLS; the API and SQL expressions
+  must be bound by the same negative tests.
 
 **Restricted documents.** The baseline uses one `resource_grant` table for restricted documents. There are no grants for notes, tasks or conversations, because those resources are Matter-wide.
 
@@ -206,7 +229,10 @@ An **assignment** is the task's assignee and due date, not a separate record. A 
 6. A return rejects the approval, reopens the task and leaves the version intact; the intern submits a new version.
 7. Approval records the decision; the approved version becomes part of the authorised record. The next edit is a new version.
 
-**Who decides.** A firm admin or a lawyer with Matter `edit` access decides. Where the Matter has another eligible reviewer, the author does not approve their own submission. A one-person firm may self-approve; the audit marks it as a self-review.
+**Who decides.** A firm admin or a lawyer with Matter `edit` access decides. A delegate may decide only if
+they are a lawyer with Matter `edit` access; delegation carries duties, not legal qualification. Where
+the Matter has another eligible reviewer, the author does not approve their own submission. A one-person
+firm may self-approve; the audit marks it as a self-review.
 
 **Agent boundary.** An agent may draft, propose and prepare a submission; submission, review and approval are human acts. An agent cannot approve its own work, clear a gate or delete a resource. The record names the run and the initiating user.
 
@@ -215,7 +241,7 @@ An **assignment** is the task's assignee and due date, not a separate record. A 
 ## 10. Shared workflows and research
 
 - A workflow run is Matter-bound. It pins the definition version. A legal gate is a workflow node; the graph cannot clear it.
-- A Research Studio project is a Matter-scoped project with a plan, sources, agent runs, findings and review. It is not the Matter chat and not a Pydantic AI Workspace. A firm-scoped project needs a reuse grant.
+- A Research Studio project is a Matter-scoped project with a plan, sources, agent runs, findings and review. It is not the Matter chat and not a Pydantic AI Workspace. A project reused outside its Matter needs a `reuse_grant`.
 - A research submission is a `research` task plus a memo version and an approval; it is not a second review system. Every cited source points at a source version, locator and quote; a later version does not silently change the citation.
 - A user browser session is Matter-bound. A headless agent session is separate. An agent may operate the user browser only through an explicit, visible, revocable control lease. Captures become documents through the document service.
 - A library item is admin-published; access is granted by admin. It is not a Matter file and not primary law.
@@ -276,6 +302,10 @@ sequenceDiagram
 
 ## 13. Collaboration acceptance
 
+These are collaboration acceptance checks. The enforcement plan records which checks are wired. Product
+gates are in [01-architecture.md](01-architecture.md) §10; domain invariants are in
+[02-domain-model.md](02-domain-model.md) §5.
+
 - Two users edit one DOCX sequentially: one holds the lease, the other reads the latest saved version; the save creates one immutable version.
 - A stale save is refused; no version is created and no text is silently overwritten.
 - A lease expires or is revoked; the next editor acquires it; an old save is refused.
@@ -288,6 +318,8 @@ sequenceDiagram
 - A section move never changes access; deleting a section never deletes a document.
 - Every create, edit, submit, review, approve, archive and delete is attributed and audited.
 - An intern submits; the supervisor returns and later approves; the original version survives.
+- A delegated non-lawyer cannot approve legal work; a delegate cannot promote an admin; every delegated
+  act is audited with both the delegate and the delegator.
 - An agent inherits the intern's grants; it cannot bypass a restricted-document grant or approve its own work.
 - A revoked user or node stops at the next tool call, save or callback.
 - A retry does not duplicate a version, message or approval.
@@ -299,6 +331,6 @@ sequenceDiagram
 
 ## 14. Deferred and implementation notes
 
-Live co-editing, shared cursors, presence, simultaneous editing, DocumentServer shared sessions and peer-hosted editor services are deferred and are not part of V1. The previous shared-session design is superseded for the CRM build order; the editing-session and save seam is retained so a future decision can add co-editing without a second document authority.
+Live co-editing, shared cursors, presence, simultaneous editing, DocumentServer shared sessions and peer-hosted editor services are deferred and are not part of V1. The shared-session design is deferred for the CRM build order; the editing-session and save seam is retained so a future decision can add co-editing without a second document authority.
 
 Editor packaging, the local Euro-Office tree, `x2t`, lease heartbeat and expiry defaults, browser control details, Research Studio scope and trace retention are recorded in `docs/implementation/eurooffice-integration-plan.md` and the owning module; they do not reopen the architecture. Application-service contracts are in [03-application-agent-and-data.md](03-application-agent-and-data.md); the resource model is in [02-domain-model.md](02-domain-model.md).

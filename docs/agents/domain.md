@@ -4,13 +4,15 @@ How the engineering skills consume this repo's domain documentation when explori
 
 ## Before exploring, read these
 
-- **`AGENTS.md` § Domain vocabulary** — the canonical term list, what each term excludes, and the
-  rejected entities.
-- **`docs/v1/02-domain-model.md`** — definitions, entities, relationships, lifecycles and invariants.
+- **`docs/v1/02-domain-model.md`** — the canonical definitions, entities, ownership, relationships,
+  lifecycles and invariants.
+- **`AGENTS.md` § Working vocabulary** — a short reminder of the highest-risk distinctions; it points at
+  the domain model rather than replacing it.
 - **The rest of `docs/v1/`** as needed. Each decision lives in the document where it applies.
 
 This repo keeps no `GLOSSARY.md` and no `docs/adr/`. Do not create them. Vocabulary has one writer,
-`AGENTS.md` plus the domain model; decisions have one writer, the document that owns them.
+`docs/v1/02-domain-model.md`; `AGENTS.md` carries only the short working vocabulary and points here.
+Decisions have one writer, the document that owns them.
 
 ## Use the vocabulary
 

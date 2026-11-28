@@ -8,6 +8,10 @@ create or apply `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-huma
 published spec carries no state label. Wayfinder tickets carry `wayfinder:<type>` only. Pull requests
 are not a request surface.
 
+The vendored skills' generic instructions to apply `ready-for-agent` or another triage label are
+overridden by this file. A spec or ticket carries no triage state label; only `wayfinder:<type>` on
+wayfinder tickets.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.

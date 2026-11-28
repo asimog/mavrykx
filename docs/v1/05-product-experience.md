@@ -94,7 +94,7 @@ The panel shows what blocks what. A missing filing date does not block evidence 
 ## 5. Document view
 
 - The DOCX/PDF in the local editor or a rendered proof.
-- Right panel: sources, citations, checks, versions, comments.
+- Right panel: MavrykX sources and citations, checks, versions, comments.
 - Edit-lease banner: who is editing, the current version, and “read-only while <name> edits”. There are no cursors, presence or live audience. Saving creates a new version; a save against a moved base is refused with the current version and a compare/reapply path.
 - Version history: compare any two versions, restore an old version as a new version, and see who saved each version and when. Approval resets on a new version.
 - Agent proposals appear as tracked changes or a diff against a named base version. A stale proposal shows the current text and the conflict; same-anchor conflict asks for a human.
@@ -126,7 +126,7 @@ A dock, not a separate app. Available on every Matter screen once step 7 is buil
 
 **What the lawyer never sees:** raw chain-of-thought, internal agent topology, raw tool names without a plain-language label, or a model’s self-assessment as proof.
 
-The dock consumes the AG-UI stream from the server via `@ag-ui/client`. Interrupts render as approval cards; custom events as the timeline and waiting states; tool events as expandable steps. Hosted Intelligence is excluded; no Node runtime in the firm install.
+The dock consumes the AG-UI stream from the server via `@ag-ui/client`. Interrupts render as approval cards; custom events as the timeline and waiting states; tool events as expandable steps. Provider citations are not the legal record; the dock renders MavrykX citation records. AG-UI does not forward provider citations. Hosted Intelligence is excluded; no Node runtime in the firm install.
 
 ---
 
@@ -145,17 +145,18 @@ One queue:
 - classification question/conflict;
 - approval request (commit, filing, send, grant, delete).
 
-A review is the supervising lawyer's decision on a submitted version. An approval is the separate legal permission on a hash. A return rejects the approval, reopens the task and leaves the submitted version intact. A waiver is explicit: it names the failed check, actor, reason and time. It never turns a failure into a pass. Approval latency is measured; a queue that trains lawyers to approve without reading is a product defect.
+A review is the firm admin's or supervising lawyer's decision on a submitted version. An approval is the separate legal permission on a hash. A return rejects the approval, reopens the task and leaves the submitted version intact. A waiver is explicit: it names the failed check, actor, reason and time. It never turns a failure into a pass. Approval latency is measured; a queue that trains lawyers to approve without reading is a product defect.
 
 ---
 
 ## 9. Settings and access
 
 - **Firm** — name, defaults, retention, model policy.
-- **Members** — invite as admin, lawyer, staff or intern; role, title, disable, sessions/devices; first member is admin. A firm admin reads every Matter and assigns Matter access.
+- **Members** — invite as admin, lawyer, staff or intern; role, title, disable, sessions/devices; the first lawyer becomes admin. A firm admin is a lawyer and reads every Matter; may delegate duties except promotion.
+- **Delegation** — an admin may delegate duties to a named user except promoting an admin; scope, start/end, revoke and audit are visible.
 - **Clients and contacts** — deduplicated people/organisations, client status, a client’s Matters.
-- **Matter access** — `edit` or `view`; a firm admin assigns it. Restricted documents use a resource grant, except for the firm admin. There are no ethical walls and no private notes, tasks or conversations.
-- **Review** — who may review and approve; the author does not review their own work where another reviewer exists. A one-person firm may self-approve, marked as a self-review.
+- **Matter access** — `edit` or `view`; a firm admin or an authorised delegate assigns it. A delegate uses their own Matter access. Restricted documents use a resource grant, except for the firm admin. There are no ethical walls and no private notes, tasks or conversations.
+- **Review** — who may review and approve; a delegate may approve only if a lawyer with Matter `edit`. The author does not review their own work where another reviewer exists. A one-person firm may self-approve, marked as a self-review.
 - **Library** — admin publication, versions, access grants.
 - **Workflows** — Pydantic Graph definitions, versions, budgets, publication.
 - **Corpus and case law** — sources, snapshots, reviewers, freshness, conflicts.
@@ -165,7 +166,7 @@ A review is the supervising lawyer's decision on a submitted version. An approva
 - **Backups** — last backup, verify, restore drill.
 - **Audit** — verify chain, export.
 
-Access changes are audited. A firm admin assigns Matter access; a non-member sees no Matter.
+Access changes are audited. A firm admin or an authorised delegate assigns Matter access; a non-member sees no Matter.
 
 ---
 
@@ -210,3 +211,9 @@ No product tour, no empty dashboard. The first screen is a Matter with a next st
 - Every check states its rule, its source and its date.
 - Every number (deadline, amount, date) links to its basis.
 - Dark mode is a theme, not a separate design.
+
+Design owners: architecture [01-architecture.md](01-architecture.md), domain
+[02-domain-model.md](02-domain-model.md), application/agent/data
+[03-application-agent-and-data.md](03-application-agent-and-data.md), collaboration
+[04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md). This document
+owns the product surface only.

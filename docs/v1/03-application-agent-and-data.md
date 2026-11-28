@@ -15,7 +15,8 @@ Application services own the use cases. A route, CLI command, tool or agent neve
 - Every service method takes a `MatterScope` where the record is Matter-bound and an `Actor` (the initiating human).
 - A service calls another module through a public contract, never through its repository or tables.
 - A service write emits an audit event.
-- A service read checks firm-admin access or Matter membership, and a restricted-document grant.
+- A service read checks firm-admin access or Matter membership, and, for a restricted document, a
+  resource grant.
 - A service write checks the expected revision (or document base version/hash) and never applies last-write-wins.
 - A transaction belongs to the use case, not to a route or a tool.
 - Unknown is a result; a service does not return the closest match.
@@ -24,11 +25,11 @@ The public surface per module is `api.py`, `contracts.py` and `service.py`. The 
 
 ### CRM services and the future harness
 
-These are the service groups the CRM implements first. The names are contracts, not a second registry; the operation catalog remains the one definition of each action.
+These are the service groups the CRM implements first. The names are contracts, not a second registry; the operation registry remains the one definition of each action.
 
 | Group | Service surface |
 |---|---|
-| `identity` | Firm bootstrap, user invite, membership role, session and device. |
+| `identity` | Firm bootstrap, user invite, membership role, session, device and delegation. |
 | `access` | Matter member add/revoke with `edit` or `view`, restricted-document resource grant, the one `access.can(actor, resource, action)` policy. |
 | `contacts` | Contact and client create/update; a client may own many Matters. |
 | `matter` | Matter open/update/close, party add, note create/edit/archive. |
@@ -44,7 +45,8 @@ These are the service groups the CRM implements first. The names are contracts, 
 - A write takes an opaque `expected_revision` (a document takes `base_version_id` and `base_hash`). A mismatch is `RESOURCE_STALE`; the service never applies last-write-wins.
 - Every mutation declares `patch` or `replace`. A replace requires a precondition (revision, version id or timestamp); a missing declaration fails the operation check.
 - A write takes an idempotency key. A replay returns the prior result.
-- A write emits an audit event in the same transaction. A read checks firm-admin access or Matter membership, and the restricted-document grant.
+- A write emits an audit event in the same transaction. A read checks firm-admin access or Matter
+  membership, and, for a restricted document, a resource grant.
 - The contract is Pydantic at the boundary. Domain entities stay plain Python.
 - The future harness calls these services through `ToolGateway`; it does not get a parallel API, a direct repository or a wider scope. `human_only` operations (approve, commit, filing, send, grant, delete) are never model tools.
 - The first harness-facing reads are `matter.get`, `workspace.list`, `document.get`, `document.history`, `note.list`, `task.list`, `event.list`, `conversation.list` and `research.get`. The first proposals are `note.create`, `task.create` and `document.propose`. Submission is human; approval is human-only.
@@ -88,26 +90,34 @@ validated result
 
 **Dispatch before execution.** The gateway appends a `dispatched` agent event before it calls the service; if that write fails, the tool does not run. It appends `completed` or `failed` after. The trace carries refs, hashes, model and cost, not raw legal text or tool arguments.
 
-The gateway is wired in step 7. Until then the same operations are exercised through the API and CLI. The CRM is not a set of agent tools with a UI attached; the services are the product, and the agent is a later caller.
+The full gateway pipeline is wired in step 7. The scaffold has a minimal `ToolGateway` that proves
+registry/tool parity for `system.status`; it has no bundle, permission, approval or idempotency pipeline
+yet. Until step 7 the same operations are exercised through the API and CLI. The CRM is not a set of
+agent tools with a UI attached; the services are the product, and the agent is a later caller.
 
 ---
 
 ## 3. Tools, Harness capabilities and bundles
 
-- **Tool** — one typed callable: name, input schema, output schema, side effects, permissions. The operation catalog is the one definition of a business action; the tool catalog is its agent-facing subset.
-- **Harness capability** — a Pydantic AI composable unit that may add tools, instructions, hooks, state and lifecycle. Examples: `Skills`, `Memory`, `AskUser`, `SubAgents`, `StepPersistence`, `ToolSearch`, `Compaction`.
+Three Pydantic libraries, three jobs. Pydantic Validation is the contract library at the boundaries;
+Pydantic AI is the agent run loop; the Pydantic AI Harness is an optional capability library, not a
+runtime. Domain entities stay plain Python.
+
+- **Tool** — one typed callable: name, input schema, output schema, side effects, permissions. The operation registry is the one definition of a business action; the tool catalog is its agent-facing subset.
+- **Harness capability** — a composable unit from the Pydantic AI Harness that may add tools, instructions, hooks, state and lifecycle. Examples: `Skills`, `Memory`, `AskUser`, `SubAgents`, `StepPersistence`, `Planning`, `DynamicWorkflow`, `Goal`. Pydantic AI core capabilities such as `ToolSearch`, `Thinking`, `WebSearch`, `MCP` and `LocalWorkspace` live in `pydantic_ai.capabilities`, not the Harness.
 - **Bundle** — a versioned selection of tools, instructions, sub-agent tools, permissions, budget, evals and owner.
 - **Legal capability pack** — MavrykX-authored Harness capabilities that wrap legal services and constraints.
 
 A tool is not a Harness capability. A Harness capability is not a business action. A bundle is not a folder of prompts.
 
-The tool catalog is derived from the CRM operation catalog in step 7. A tool that has no service behind it is a defect. A service that is not in any bundle is still reachable through HTTP and the CLI; hiding a tool is not access control.
+The tool catalog is derived from the CRM operation registry in step 7. A tool that has no service behind it is a defect. A service that is not in any bundle is still reachable through HTTP and the CLI; hiding a tool is not access control. Every agent-facing legal tool has a catalog entry, a bundle and an eval before it ships.
 
 **Progressive disclosure.** The tool catalog may be large; the active surface is small.
 
 - A bundle selects the capabilities and tools a run may use.
 - A tool outside the bundle is denied even if the model names it.
-- Use Harness `ToolSearch` / `ToolBridge`, `defer_loading`, `Skills`, `ToolOutputLimits` and `Compaction`.
+- Use Pydantic AI `ToolSearch`; Harness `ToolBridge`, `Skills`, `ToolOutputLimits` and compaction
+  capabilities; `defer_loading` where the provider supports it.
 - A hidden tool is not an access-control boundary. The gateway and RLS enforce access.
 - The UI shows lawyer-language steps, not raw tool names.
 
@@ -134,10 +144,15 @@ There are no separate chat, drafting, research or intake agents. Different work 
 
 **Harness capabilities used:**
 
-- Skills, SubAgents, Dynamic Workflow (read-only fan-out), Planning, Memory, Compaction, Step Persistence, Guardrails, Goal, budgets, model routing, tracing.
+- `Skills`, `SubAgents`, `DynamicWorkflow` (read-only fan-out), `Planning`, `Memory`, compaction
+  capabilities, `StepPersistence`, guardrail capabilities, `Goal`, `SpendLimits`, `ModelRouter` and
+  instrumentation/tracing.
 - `AskUser`, deferred tools and tool approval for interaction.
 - `ToolCallJudge` may block; `ApprovalReviewer` is never enabled for legal actions.
 - `Peers` and `CapabilityCreation` are not enabled.
+
+**Provider citations.** Pydantic AI `Citations` may be enabled for web research; it is not a Harness
+capability and is never the legal citation record.
 
 **What the Harness does not own:** Matter access, document identity, approvals, audit, legal records. A Harness Workspace is an execution environment; the Matter is not a Workspace.
 
@@ -163,7 +178,7 @@ The context package is a record, not a transient string. It is persisted before 
 
 **Resumed runs.** Replay the exact package, then revalidate pins. A superseded document version, stale rule or changed approval is marked `stale`/`unconfirmed`; do not silently rebuild.
 
-**Output scope.** Agent output that embeds Matter content carries the source Matter and version ids. It is stored and rendered only while the reader can still read those sources; a lost grant or a cross-Matter copy does not inherit the output. A citation ref is minted by the run; an unminted ref is rendered as unresolved, never as a source.
+**Output scope.** Agent output that embeds Matter content carries the source Matter and version ids. It is stored and rendered only while the reader can still read those sources; a lost grant or a cross-Matter copy does not inherit the output. A citation ref is minted by the run's citation record; an unminted ref is rendered as unresolved, never as a source. Provider citations do not mint legal refs.
 
 ---
 
@@ -178,7 +193,12 @@ The context package is a record, not a transient string. It is persisted before 
 - A changed subject makes the approval stale.
 - An agent cannot approve its own work.
 
-**Review and approval are different.** A review is the supervising lawyer's decision on submitted work; an approval is the hash-bound permission for one legal operation. A submission composes a task, a document version, an approval, annotations and a notification. A return rejects the approval, reopens the task and leaves the version intact; the next attempt is a new version. Only a firm admin or a lawyer with Matter `edit` access decides; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked in the audit.
+**Review and approval are different.** A review is the firm admin's or supervising lawyer's decision on
+submitted work; an approval is the hash-bound permission for one legal operation. The submission and
+review flow — including who decides, the return path and the one-person-firm self-review — is owned by
+[04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §9. A return
+rejects the approval, reopens the task and leaves the submitted version intact; the next attempt is a
+new version.
 
 **Gate kinds:** Matter open, document approve, filing ready, rule publish, access grant, deletion. A gate blocks until a human clears it against frozen evidence.
 
@@ -196,9 +216,11 @@ The context package is a record, not a transient string. It is persisted before 
 - `workflow_definition` / `workflow_version` / `workflow_run` / `workflow_step` are the records.
 - A **playbook** is a kind of workflow definition, not a second runtime.
 - A **workflow creator** edits a validated graph spec; it does not execute arbitrary Python.
-- A workflow is deterministic orchestration, not an agent. The Harness `Dynamic Workflow` capability is a separate agent fan-out primitive; name it in full.
+- A workflow is deterministic orchestration, not an agent. The Harness `DynamicWorkflow` capability is a separate agent fan-out primitive; use the exact name.
 - A legal gate is a workflow node; the agent cannot clear it.
-- A review gate raises a review task; settling the gate settles the task, and completing the task settles the gate.
+- A review gate follows the submission and review flow in
+  [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §9; the gate
+  pins the submitted version hash.
 - A run pins the definition version.
 - `job` is the durable queue: type, payload, attempts, `run_at`, `locked_by`, `locked_at`, `lease_expires_at`, `status`, `idempotency_key`. `NOTIFY` wakes a worker on commit; a rolled-back request queues nothing.
 
@@ -210,12 +232,14 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 
 - The CLI calls application services. No business logic, no SQLAlchemy.
 - `mavrykx` commands cover firm, user, client, contact, Matter, membership, section, note, task, assignment, event, conversation, message, review, documents, sessions, context, research, runs, nodes, classification, forum sync, browser, corpus, case law, library, Research Studio and workflows.
-- The tool catalog generates the CLI command, HTTP operation, Pydantic AI tool and docs. A tool in two places is a defect.
+- The operation registry is the one definition of a business action; the CLI, HTTP and tool adapters
+  must match it. `tools/operations.py` checks parity. Generated docs and clients are planned; a tool in
+  two places is a defect.
 - `clai` / `mavrykx chat` is optional conversational access; a model-mediated prompt cannot replace a deterministic command, typed flags, exit codes or a security action.
 
-**Core commands:**
+**Target command surface.** Commands ship with their owning module:
 
-`firm init` · `user invite|disable` · `client create|update` · `contact create|update` · `matter create|member add|member revoke|close` · `section create|rename|move|delete` · `note create|edit|delete` · `task create|assign|update|complete` · `event create|update|cancel` · `conversation create|share` · `message post` · `file upload|get` · `document get|submit|compare|restore` · `document session open|save|close|revoke` · `document propose|apply|accept|reject|comment` · `review submit|comment|decide` · `context select` · `classification propose|confirm` · `forum adapter sync` · `browser open|handoff` · `research submit` · `corpus ingest` · `case-law search` · `library publish|grant` · `research studio create|run` · `workflow create|publish|run` · `run start|status|cancel` · `node register|status|revoke` · `audit verify|export`.
+`firm init` · `user invite|disable` · `admin delegate|revoke` · `client create|update` · `contact create|update` · `matter create|member add|member revoke|close` · `section create|rename|move|delete` · `note create|edit|delete` · `task create|assign|update|complete` · `event create|update|cancel` · `conversation create|share` · `message post` · `file upload|get` · `document get|submit|compare|restore` · `document session open|save|close|revoke` · `document propose|apply|accept|reject|comment` · `review submit|comment|decide` · `citation propose|verify` · `context select` · `classification propose|confirm` · `forum adapter sync` · `browser open|handoff` · `research submit` · `corpus ingest` · `case-law search` · `library publish|grant` · `research studio create|run` · `workflow create|publish|run` · `run start|status|cancel` · `node register|status|revoke` · `audit verify|export`.
 
 **Shared errors:** `MATTER_ACCESS_DENIED`, `RESOURCE_ACCESS_DENIED`, `RESOURCE_STALE`, `DOC_STALE_BASE`, `DOC_STALE_TARGET`, `DOC_SESSION_ACTIVE`, `DOC_SESSION_REVOKED`, `EDIT_LEASE_HELD`, `PROPOSAL_STALE`, `PROPOSAL_CONFLICT`, `REVIEW_STALE`, `RUN_LEASE_LOST`, `RUN_ACCESS_REVOKED`, `EFFECT_UNCERTAIN`, `APPROVAL_STALE`, `IDEMPOTENT_REPLAY`.
 
@@ -226,7 +250,8 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 ### PostgreSQL
 
 - One database, one baseline schema, one owner per table.
-- Every legal row carries `matter_id` and RLS.
+- Every Matter-bound legal row carries `matter_id` and RLS. Firm, identity, reference and corpus tables
+  are scoped by firm or corpus; every `app` table has RLS.
 - The app role has no `BYPASSRLS`; every app query is subject to the policy. The migration owner reads `document` without FORCE for the access function, to prevent function recursion.
 - `app.user_id` is set per transaction with `set_config(..., true)`.
 - Immutable: document versions, audit events, published rules.
@@ -268,11 +293,36 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 
 ### Primary law and case law
 
-- `corpus` owns court rules, statutes, laws, regulations and notifications. `case_law` owns judgments, authorities, citations and treatment.
+- `corpus` owns court rules, statutes, laws, regulations and notifications. `case_law` owns judgments, authorities and treatment; `verification` owns citation records.
 - A source enters `source`; a snapshot is content-addressed; a human verifies; an amendment is a new version with `supersedes_id`.
 - A stale rule or authority says `unconfirmed`, never current.
-- Citation verification is deterministic: authority, form, pinpoint, quote, currency, treatment.
+- Citation verification is deterministic: target, form, pinpoint, quote, currency, treatment.
 - The corpus pipeline never ingests case law; the case-law module never ingests statutes.
+
+### Citations and sources
+
+- A **cited source** is the thing a citation relies on. A **citation** is a use of that source at an
+  anchor in a document version. Do not model the two as one record.
+- The citation target is a discriminated union: case law (judgment version plus neutral citation and
+  pinpoint), primary law (instrument version or provision), source material (document version and
+  anchor; appendices through a document relation or filing item) and external source (URL and content
+  hash). Exactly one target is set. Primary law covers statutes, court rules, regulations, notifications,
+  practice directions and manuals; judgments are case law, not primary law. The baseline has
+  `judgment.case_number` but no neutral citation column; add `neutral_citation` with the case-law module.
+- `pydantic_ai.Citation` is provider metadata attached to a text part. `Citations` is a Pydantic AI
+  capability, not a Harness capability. Provider citations are optional and provider-specific; they
+  attach to text output only, structured output drops them, and the AG-UI adapter does not forward them
+  to the frontend. They are never the legal record.
+- The legal record is written by the `citation.propose` tool or an application service. It starts
+  `unverified`; deterministic checks of target, quote, pinpoint, currency and treatment set the status.
+  A model may propose a citation; it may not verify one.
+- A provider `Citation.anchor` is a character span in the model text, not a document anchor. When the
+  output is applied to a document, the proposal maps it to a `document_anchor`/anchor key; it is never
+  assumed.
+- A provider web citation may seed an external-source proposal. A provider document citation maps to a
+  MavrykX document version only when the run can identify that version; the provider's `document_id` is
+  not a MavrykX identity.
+- The UI renders MavrykX citation records, not the provider stream. The agent stream is transport.
 
 ### Library
 
@@ -286,7 +336,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Append-only, hash-chained legal/security events.
 - Every workspace mutation emits an event, not only document versions and legal records: section, note, task, assignment, event, conversation, message, document, review, approval and deletion.
 - Who, what, when, which Matter, which subject, why, previous/next revision or hash, evidence reference.
-- Performer type is `user`, `agent`, `system` or `service`. A service is a named connector or MCP; `actor_ref` names it. Trigger is `direct`, `delegation` or `schedule`. The audit event stores the performer, trigger, run, initiating user, approval status and approver as columns. The JSONB payload carries evidence and detail.
+- Performer type is `user`, `agent`, `system` or `service`. A service is a named connector or MCP; `actor_ref` names it. Trigger is `direct`, `delegation` or `schedule`. The audit event stores the performer, trigger, run, initiating user, approval status and approver as columns. The JSONB payload carries evidence and detail. A delegated act records the delegate as actor, the delegator and the delegation scope; only an admin may promote an admin.
 - A document event names the version and hash. A review event names the submitted hash and decision. A deletion names what was removed or archived.
 - Immutable; app role can append via function and read, not update/delete.
 - Retention: life of Matter + 7 years; legal hold blocks deletion.
@@ -300,11 +350,14 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 
 - Local accounts + TOTP + server sessions + device keys; OIDC optional.
 - Argon2id passwords (`argon2-cffi`); TOTP (`pyotp`); breached-password check.
-- Sessions are opaque 256-bit tokens stored hashed in `session`; revocation deletes the row. JWTs are only for short-lived document URLs and the signed local-editor config.
+- Sessions are opaque 256-bit tokens stored hashed in `session`; revocation sets `revoked_at` and the token is rejected. A later retention job may purge old revoked sessions. JWTs are only for short-lived document URLs and the signed local-editor config.
 - Step-up auth for commit, filing-ready, send, grant, delete.
-- Firm roles `admin`, `lawyer`, `staff`, `intern`; Matter access `edit` or `view`. A firm admin reads every Matter and assigns Matter access. A non-member reads no Matter.
-- Every Matter member reads every note, task, conversation and message in the Matter. There are no private resources. Restricted documents need a grant, and the grant covers every related document row. A firm admin does not need the grant.
-- The baseline enforces this model. There is no ethical wall and no conflict-check subsystem.
+- Firm roles `admin`, `lawyer`, `staff`, `intern`; a firm admin is a lawyer. The access policy is owned by
+  [04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §5; the service
+  checks it and RLS re-checks it. A firm admin reads every Matter; a non-member reads none; a restricted
+  document needs a resource grant, except for the firm admin.
+- The baseline's RLS policies are the second check on the Matter access model; sessions, device keys and
+  step-up are service controls. There is no ethical wall and no conflict-check subsystem.
 - Agent inherits the launching user, intersected with the bundle; no wider access.
 - A shared conversation never widens document access.
 - V1 has no hosted DocumentServer, no Docker dependency and no real-time co-editing; the editor is local and saves through the API.
@@ -317,6 +370,11 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 ---
 
 ## 11. Data and agent acceptance
+
+These are component acceptance checks for application, data and agent. The enforcement plan records
+which checks are wired. Product gates are in [01-architecture.md](01-architecture.md) §10;
+collaboration gates are in
+[04-shared-workspaces-and-collaboration.md](04-shared-workspaces-and-collaboration.md) §13.
 
 - A service write has an audit event; a broken fixture fails the check.
 - A workspace write without an audit event fails the check, whether the resource is a document, note, task, event, conversation or section.
@@ -333,6 +391,9 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - A review is bound to the submitted version hash; a return leaves the version intact.
 - A corpus instrument has source/snapshot/version/reviewer; a stale one is `unconfirmed`.
 - A case-law quote/pinpoint verifies deterministically.
+- A provider citation never sets a legal citation to `verified`; the record needs a deterministic check.
+- A delegated act records the delegate and delegator; a non-lawyer delegate cannot approve legal work; a
+  delegate cannot promote an admin.
 - A library item is admin-published and invisible without a grant.
 - A workflow run pins its definition; a replay does not duplicate a side effect.
 - An agent run has a scope, context package and budget.
