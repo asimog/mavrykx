@@ -2,9 +2,9 @@
 
 **Status:** current · **Version:** v1 · **Date:** 2026-11-28
 
-The Matter is the shared workspace. There is no separate Workspace, Project or Space entity. A **section** is a named arrangement of documents inside one Matter; it is not a Workspace and not a permission boundary.
+The Matter is the shared workspace. There is no separate Workspace, Project or Space entity. A **section** is a named arrangement of documents inside one Matter. It is not a Workspace and not a permission boundary.
 
-Collaboration is multi-user and sequential. Several lawyers, interns and authorised staff work in one Matter. They see the latest saved state. One user edits a document at a time. There is no real-time co-editing, shared cursor or presence in V1.
+Collaboration is multi-user and sequential. Lawyers, staff and interns work in one Matter. They see the latest saved state. One user edits a document at a time. There is no real-time co-editing, shared cursor or presence in V1.
 
 ---
 
@@ -12,30 +12,31 @@ Collaboration is multi-user and sequential. Several lawyers, interns and authori
 
 The Matter is the unit of confidentiality and the shared record. A document, note, task, assignment, event, conversation, research project or workflow run is scoped to it.
 
-**What is shared:** the Matter spine, the section tree, authorised documents, matter-visible notes, tasks and assignments, events, Matter-wide conversations, submissions, reviews, approvals, decisions, filings, activity and library items granted to the Matter.
+**What is shared:** the Matter spine, the section tree, documents, notes, tasks and assignments, events, conversations, submissions, reviews, approvals, decisions, filings, activity and library items granted to the Matter. Every Matter member reads these resources.
 
-**What is private:** a private note, a private conversation, a private task (creator and assignee), a restricted document without a grant, a draft that has not been submitted, a classification proposal before confirmation and an unpublished library item.
+**What is not shared:** a Matter is invisible to a non-member. A restricted document is invisible without a resource grant; the firm admin does not need the grant. A draft that has not been submitted and an unpublished library item are not part of the Matter record until they are saved or published.
 
-**Firm administration is not Matter access.** A firm admin manages users, settings and backups; that role does not by itself open a Matter. A firm admin who is also a Matter member follows that membership. A supervising lawyer is a Matter `lead` or `approver`.
+**No ethical walls. No conflict-check subsystem. No private resources.** The firm uses one simple hierarchy. A firm admin reads every Matter. The firm admin assigns Matter access to lawyers, staff and interns. Matter resources are Matter-wide; only a restricted document needs a separate grant.
 
 **No second container.** A Workspace/Project would split the confidentiality unit and the record. The Matter already runs from first note to archive. A section is an arrangement row inside the Matter, never a container of authority.
 
 ---
 
-## 2. Membership, roles and supervision
+## 2. Firm roles and Matter access
 
-Firm roles are `admin`, `lawyer` and `staff`. Matter access is `lead`, `editor`, `viewer` or `approver`. The two combine; neither overrides a wall.
+Firm roles are `admin`, `lawyer`, `staff` and `intern`. A firm admin is a lawyer who manages the firm. Matter access is `edit` or `view`. The firm admin assigns access.
 
-| Matter access | May do |
+| Actor | Access |
 |---|---|
-| `lead` | Manage the Matter, its members and sections; create and edit shared resources; submit; review and approve. |
-| `editor` | Create and edit shared resources; submit work; comment. No membership changes and no approval. |
-| `viewer` | Read shared resources and comment where the resource allows it. No edit or approval. |
-| `approver` | Read shared resources, review submissions and approve or return. No edit of the submitted version. |
+| Firm admin | Reads and edits every Matter by role. Assigns Matter access. |
+| Lawyer with Matter `edit` | Creates and edits Matter resources; submits work; reviews and approves where eligible. |
+| Lawyer with Matter `view` | Reads Matter resources and comments where the resource allows it. No edit or approval. |
+| Staff or intern with Matter `edit` | Creates and edits Matter resources; submits work. No firm administration. |
+| Staff or intern with Matter `view` | Reads Matter resources. No edit or approval. |
 
-An intern is a `staff` or `lawyer` user with `editor` access, not a separate role. A supervising lawyer is a `lead` or `approver`; an admin lawyer who is also the Matter `lead` or `approver` is the supervising lawyer. Approval authority is never inferred from seniority or from the firm `admin` role alone.
+An intern is a firm `intern`, not a lawyer. A junior lawyer is a firm `lawyer` with Matter `edit` or `view`. Approval authority comes from the firm admin or a lawyer role, not from seniority alone.
 
-The role matrix is one declaration, mirrored by the RLS tests; the client shows the same grants, but the service and RLS decide. Membership changes are audited. Revocation takes effect on the next operation: API session, edit lease, gateway call or RLS check.
+Membership changes are audited. Revocation takes effect on the next operation: API session, edit lease, gateway call or RLS check.
 
 ---
 
@@ -43,20 +44,20 @@ The role matrix is one declaration, mirrored by the RLS tests; the client shows 
 
 Every resource carries one `matter_id` and one owning module. A section arranges documents; it does not own or copy them.
 
-| Resource | Owner | Relationship to the Matter | Visibility | Formal review |
+| Resource | Owner | Relationship to the Matter | Access | Formal review |
 |---|---|---|---|---|
-| Section (`folder`) | documents | Named, ordered document arrangement; may nest | Matter | No |
-| Document | documents | Belongs to one Matter and optionally one section | Matter or restricted | Yes, on a version |
+| Section (`folder`) | documents | Named, ordered document arrangement; may nest | Matter-wide | No |
+| Document | documents | Belongs to one Matter and optionally one section | Matter-wide, or restricted with a grant | Yes, on a version |
 | Document version | documents | Immutable version of one document | Follows the document | Yes |
-| Note | matter | Matter-scoped text; its heading is content | Private or Matter; firm-wide notes are not used | No; attach a document version to a submission |
-| Task / assignment | work | Matter-scoped work; assignment is its assignee and due date | Private or Matter | Completion; review is via a linked version |
-| Appointment | work | Matter-scoped meeting or call; the calendar is derived | Matter | No |
-| Deadline | work | Matter-scoped time limit with a basis; the calendar is derived | Matter | No |
-| Hearing | proceedings | Dated occurrence in a proceeding; the calendar is derived | Matter | No |
-| Conversation / message | harness | Matter-scoped room and attributed turns | Private, shared or Matter | No |
-| Research project | research | Matter-scoped plan, sources and findings | Matter | Plan approval; submission via a memo version |
+| Note | matter | Matter-scoped text; its heading is content | Matter-wide | No; attach a document version to a submission |
+| Task / assignment | work | Matter-scoped work; assignment is its assignee and due date | Matter-wide | Completion; review is via a linked version |
+| Appointment | work | Matter-scoped meeting or call; the calendar is derived | Matter-wide | No |
+| Deadline | work | Matter-scoped time limit with a basis; the calendar is derived | Matter-wide | No |
+| Hearing | proceedings | Dated occurrence in a proceeding; the calendar is derived | Matter-wide | No |
+| Conversation / message | harness | Matter-scoped room and attributed turns | Matter-wide | No |
+| Research project | research | Matter-scoped plan, sources and findings | Matter-wide | Plan approval; submission via a memo version |
 | Approval | approvals | Bound to one subject and hash | Follows the subject | Yes |
-| Decision | approvals | Human choice with options and rationale | Matter or restricted | No |
+| Decision | approvals | Human choice with options and rationale | Matter-wide | No |
 
 **Relationships.**
 
@@ -76,21 +77,20 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 
 | Resource | Create | Edit | Submit and review | Delete or archive |
 |---|---|---|---|---|
-| Section | `lead` or `editor` | Rename, reorder, move; `lead` or `editor` | None | Only when empty of documents and child sections; audited |
-| Document | `lead` or `editor` with document edit access | Acquire the edit lease; save a new version | Submit the current version; `lead` or `approver` reviews | Archive; hard delete needs approval and no legal hold |
-| Note | `lead` or `editor` | Author, or `lead` for a shared note; every edit audited | None unless attached to a submitted version | Author or `lead`; audited; blocked by a legal hold |
-| Task / assignment | `lead` or `editor` | Assignee updates status and comments; only the assignor or `lead` changes the due date | Completion reviewed where the task says so | Cancel; hard delete is exceptional and audited |
-| Appointment / deadline / hearing | `lead` or `editor` | Creator or `lead` | None | Cancel or delete; audited |
-| Conversation | `lead` or `editor` | Owner changes title and visibility; messages are immutable | None | Owner or `lead` closes or archives |
-| Research submission | `lead` or `editor` creates the task and uploads the memo | Assignee edits by new document version | `approver` reviews the submitted version | Archive; the versions survive |
-| Approval | Created by submission | No edit; it expires or becomes stale | `lead` or `approver` decides; the author does not decide where another reviewer exists | No delete |
+| Section | Firm admin or Matter `edit` | Rename, reorder, move; firm admin or Matter `edit` | None | Only when empty of documents and child sections; audited |
+| Document | Firm admin or Matter `edit` with document edit access | Acquire the edit lease; save a new version | Submit the current version; a firm admin or lawyer with Matter `edit` reviews | Archive; hard delete needs approval and no legal hold |
+| Note | Firm admin or Matter `edit` | Firm admin, author or Matter `edit`; every edit audited | None unless attached to a submitted version | Firm admin or author; audited; blocked by a legal hold |
+| Task / assignment | Firm admin or Matter `edit` | Assignee updates status and comments; only the assignor or a Matter `edit` member changes the due date | Completion reviewed where the task says so | Cancel; hard delete is exceptional and audited |
+| Appointment / deadline / hearing | Firm admin or Matter `edit` | Creator or Matter `edit` | None | Cancel or delete; audited |
+| Conversation | Firm admin or Matter `edit` | Creator or Matter `edit` changes the title; messages are immutable | None | Creator or firm admin closes or archives |
+| Research submission | Firm admin or Matter `edit` creates the task and uploads the memo | Assignee edits by new document version | A firm admin or lawyer with Matter `edit` reviews the submitted version | Archive; the versions survive |
+| Approval | Created by submission | No edit; it expires or becomes stale | A firm admin or lawyer with Matter `edit` decides; the author does not decide where another reviewer exists | No delete |
 
 **Rules that apply to every row.**
 
 - Creation records the actor; every later change emits an audit event.
 - A new version or revision never overwrites an older one.
-- A task assignee holds `editor` or `lead` Matter access; a viewer can be informed but not assigned.
-- The assignor or a `lead` owns the due date; an assignee cannot silently extend a deadline.
+- The assignor or a Matter `edit` member owns the due date; an assignee cannot silently extend a deadline.
 - A delete is a human act. An agent may propose one; it cannot execute it.
 - No hard delete while a legal hold exists.
 - A section never becomes a permission boundary.
@@ -100,28 +100,26 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 ## 5. Access rules
 
 ```text
-allow = firm membership
-        AND matter membership
-        AND NOT ethical wall
-        AND resource visibility or grant
+allow = firm admin
+        OR (matter membership AND resource access)
+        AND (for a restricted document) a live resource grant
         AND (for an agent) the initiator's grants ∩ run scope ∩ bundle
         AND (for an edit) the edit lease held by the actor
 ```
 
-- Matter membership is the outer boundary. A firm admin is not a bypass.
-- An ethical wall always denies.
-- A `resource_grant` narrows a document, conversation or task inside the Matter; it never widens beyond the Matter and never overrides a wall.
-- A restricted document needs a grant; a Matter document is member-readable.
-- A private note is owner-only. A private task is creator and assignee. A private conversation is owner-only. Another member, including a `lead` or `approver`, does not read private content by role. The owner shares it or it stays private.
-- A shared conversation does not authorise every Matter file. A document link is a reference, not a grant.
+- A firm admin reads every Matter. A non-member reads no Matter.
+- Matter membership is the outer boundary for every other user. There is no ethical wall.
+- A Matter `edit` member creates and edits Matter resources. A Matter `view` member reads them.
+- A restricted document needs a resource grant, except for the firm admin. The grant covers the document, its versions, text, anchors, annotations, relations and chunks.
+- A note, task, conversation or message has no private mode. Every Matter member reads it.
 - A section does not change access to the documents in it.
 - An agent inherits the initiating user, subject to the bundle. It never gains wider access because it is in a shared Matter.
-- An agent cannot approve its own work or clear a legal gate.
+- An agent cannot approve its own work, clear a legal gate or delete a resource.
 - Revocation is enforced on the next operation: gateway, RLS, API session, edit lease.
 - The service checks it; RLS re-checks it. The UI is not the boundary.
-- The visibility rule is declared once and reused by the service and RLS; the API and SQL expressions are bound by the same negative tests.
+- The Matter access rule is declared once and reused by the service and RLS; the API and SQL expressions are bound by the same negative tests.
 
-**Implementation gate.** The baseline `note` policy is Matter-wide; the baseline `task` policy lets a firm admin read a private task; the baseline `agent_run` policy lets a firm admin read a private trace; and the baseline `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` policies are Matter-wide rather than following a restricted document. Private notes, private tasks and private traces are not exposed until the step 3 policy migration narrows them to the owner (and, for a task, its assignee); restricted-document child rows are not exposed until the step 4 policy migration follows `has_document_access`. No private or restricted resource ships on application checks alone.
+**Restricted documents.** The baseline uses one `resource_grant` table for restricted documents. There are no grants for notes, tasks or conversations, because those resources are Matter-wide.
 
 ---
 
@@ -135,7 +133,7 @@ Euro-Office is the editor. V1 runs the embedded Windows-native editor and `x2t` 
 2. Another authorised user who opens the same document gets the latest committed version read-only. They are not joined to a live session.
 3. The holder edits locally and saves through the MavrykX API. The save carries the session id, base version id, base hash and an idempotency key.
 4. The service locks the document row, verifies the lease holder and the current base, stores the blob and creates a new immutable `document_version`. The document's current version moves; the audit event records the actor and both hashes.
-5. The save releases the lease, or renews it if the editor remains open. A lease expires on a missed heartbeat or is revoked by a `lead`; an expiry or revocation is audited. A user may request takeover of a stuck lease; a `lead` approves it and both the request and the release are audited. Unsaved bytes are a client concern; the server never promotes a live buffer.
+5. The save releases the lease, or renews it if the editor remains open. A lease expires on a missed heartbeat or is revoked by a firm admin or the responsible lawyer. An expiry or revocation is audited. A user may request takeover of a stuck lease; a firm admin or the responsible lawyer approves it, and both the request and the release are audited. Unsaved bytes are a client concern; the server never promotes a live buffer.
 
 **No silent overwrite.** A save against a moved base is refused with `DOC_STALE_BASE`; the editor shows the current version and offers compare or reapply. A save from a lost lease is refused with `DOC_SESSION_REVOKED`. The unique `(document_id, version_no)` constraint and the row lock make the check atomic. A retry with the same idempotency key returns the version already created.
 
@@ -157,11 +155,11 @@ Euro-Office is the editor. V1 runs the embedded Windows-native editor and `x2t` 
 | Second user saves against an old base | `DOC_STALE_BASE`; no version; compare or reapply. |
 | Lease expires, another user edits, first user saves | `DOC_SESSION_REVOKED` or `DOC_STALE_BASE`; no overwrite. |
 | Two users edit the same note | First revision wins; second gets `RESOURCE_STALE` and reloads. |
-| Lead reassigns a task while the assignee updates it | Revision check fails for the stale writer; no silent merge. |
+| Matter `edit` member reassigns a task while the assignee updates it | Revision check fails for the stale writer; no silent merge. |
 | Supervisor submits a review, then a new version lands | Approval is stale; review the new hash. |
 | Agent proposal against a moved base | Stale; rebase only if anchors are unchanged, otherwise `needs_human`. |
 | User loses access during an edit lease | Lease revoked; next save or tool call denied. |
-| Delete while a document is leased | Delete is refused until the lease closes, or the lead revokes the lease first. |
+| Delete while a document is leased | Delete is refused until the lease closes, or the firm admin revokes the lease first. |
 | Retry of a save or write | Idempotency key returns the prior result; no duplicate version. |
 
 **Decision rule.** Automatic only for read-only work or a deterministic rebase of disjoint anchors. A commit, filing, send, grant, delete or approval is a human act.
@@ -170,11 +168,11 @@ Euro-Office is the editor. V1 runs the embedded Windows-native editor and `x2t` 
 
 ## 8. Change visibility and attribution
 
-Users read the latest committed state. A saved change is visible to every authorised reader on the next read; no one sees another user's unsaved buffer.
+Users read the latest committed state. A saved change is visible to every Matter member on the next read; no one sees another user's unsaved buffer. A non-member sees nothing.
 
 **Delivery.** Matter-scoped SSE on the existing `api` carries an invalidation: resource type, id, revision or version id. It does not carry document content, cursors, typing or presence. Clients refetch the resource. The event stream is transport; `message`, `audit_event` and the saved rows are durable.
 
-**Attribution.** Every write emits an audit event: actor, action, Matter, subject, before/after revision or hash, time and, for an agent, the run and initiating user. Creation columns are a convenience; the audit is the authoritative who/when record. The Activity view reads the audit and the saved rows, not a second history table.
+**Attribution.** Every write emits an audit event: actor, trigger, action, Matter, subject, before/after revision or hash, time and, for an agent or service, the run, service identity and initiating user. Creation columns are a convenience; the audit is the authoritative who/when record. The Activity view reads the audit and the saved rows, not a second history table.
 
 A user can answer, for any shared resource: who created it, who changed it, who submitted it, who reviewed or approved it, who deleted or archived it, and when. A document answer names the version and hash.
 
@@ -200,15 +198,15 @@ An **assignment** is the task's assignee and due date, not a separate record. A 
 
 **The intern scenario.**
 
-1. The supervising lawyer creates a research task and assigns it to the intern.
+1. A lawyer with Matter `edit` access creates a research task and assigns it to the intern.
 2. The intern's agent reads only the intern's authorised sources.
 3. The intern uploads the memo and authorities, then submits the current version.
 4. The task and document enter review; the approval is bound to the version hash.
-5. The supervising lawyer reads that version, comments and approves or returns.
+5. A firm admin or a lawyer with Matter `edit` access reads that version, comments and approves or returns.
 6. A return rejects the approval, reopens the task and leaves the version intact; the intern submits a new version.
 7. Approval records the decision; the approved version becomes part of the authorised record. The next edit is a new version.
 
-**Who decides.** A `lead` or `approver` decides. Where the Matter has another eligible reviewer, the author does not approve their own submission. A one-person firm may self-approve; the audit marks it as a self-review.
+**Who decides.** A firm admin or a lawyer with Matter `edit` access decides. Where the Matter has another eligible reviewer, the author does not approve their own submission. A one-person firm may self-approve; the audit marks it as a self-review.
 
 **Agent boundary.** An agent may draft, propose and prepare a submission; submission, review and approval are human acts. An agent cannot approve its own work, clear a gate or delete a resource. The record names the run and the initiating user.
 
@@ -283,17 +281,19 @@ sequenceDiagram
 - A lease expires or is revoked; the next editor acquires it; an old save is refused.
 - Version comparison is read-only; restoring an old version creates a new version and resets approval.
 - A note or task updated against an old revision is refused with `RESOURCE_STALE`.
-- A private note and private conversation are invisible to every other Matter member; a private task is invisible except to its assignee; a restricted document is invisible without a grant.
+- A firm admin reads every Matter; a non-member reads no Matter.
+- A Matter member reads every note, task, conversation and message in the Matter.
+- A restricted document and its version, text, anchors, annotations, relations and chunks are invisible without a grant, except for the firm admin.
 - Cross-Matter access to a document, note, task, event or conversation returns nothing.
 - A section move never changes access; deleting a section never deletes a document.
 - Every create, edit, submit, review, approve, archive and delete is attributed and audited.
 - An intern submits; the supervisor returns and later approves; the original version survives.
-- An agent inherits the intern's grants; it cannot read a restricted document or approve its own work.
+- An agent inherits the intern's grants; it cannot bypass a restricted-document grant or approve its own work.
 - A revoked user or node stops at the next tool call, save or callback.
 - A retry does not duplicate a version, message or approval.
 - No DocumentServer process, hosted editor or Docker dependency is required for collaboration.
 
-**Negative fixtures.** A non-member reading each resource; a walled member; a peer reading a private note, task or conversation; a restricted document without a grant; a revoked grant; a stale note/task revision; a stale document base; a second lease holder; a duplicate save retry; a stale approval; and a cross-Matter link. Each must fail with the named error, not an empty result that looks like success.
+**Negative fixtures.** A non-member reading each resource; a Matter member reading a restricted document without a grant; a revoked grant; a stale note/task revision; a stale document base; a second lease holder; a duplicate save retry; a stale approval; and a cross-Matter link. Each must fail with the named error, not an empty result that looks like success.
 
 ---
 

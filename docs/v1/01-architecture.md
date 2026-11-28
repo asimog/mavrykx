@@ -19,6 +19,8 @@ The platform is a modular monolith with a firm server, Electron clients and auth
 - CRM foundations first; the AI legal harness second.
 - One firm with multiple users; a client may have many Matters.
 - One shared Matter workspace; sequential document editing. No real-time co-editing in V1.
+- A firm admin has access to every Matter and assigns Matter access to lawyers, staff and interns.
+- No ethical walls, no conflict-check subsystem and no private-resource rule. Matter resources are Matter-wide; restricted documents need a resource grant, except for the firm admin.
 - Self-hosted per firm; one installation serves one firm.
 - Human approval for commit, filing, send, grant and delete.
 - DOCX/PDF is the work product; chat is not a legal record.
@@ -100,7 +102,7 @@ flowchart TB
 ### Matter management — the Clio-shaped substrate
 
 - `identity` — firm, user, membership, session, device, execution node.
-- `access` — matter membership, ethical wall, reuse grant, resource grant, the one visibility policy.
+- `access` - matter membership, reuse grant, restricted-document resource grant, the one Matter access policy.
 - `contacts` — contact, client.
 - `matter` — matter, parties, relations, notes.
 - `work` — tasks, assignments, task-document links, deadlines, appointments.
@@ -266,7 +268,7 @@ Versions checked on 2026-11-26. Pin exact versions.
 - One active `editing_session` is the edit lease. Only its holder may save. Another user who opens the document reads the latest committed version.
 - A save carries the lease, base version and base hash. The service locks the document row, verifies both, creates an immutable `document_version` and updates the current pointer. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`.
 - Agents submit base-bound `document_proposal` rows; they do not hold the human edit lease and cannot apply while it is active.
-- There is no server checkpoint and no `editor_recovery` version in V1. The baseline retains the shared-session checkpoint columns and the `editor_recovery` source for the deferred option; V1 does not write them (see [02-domain-model.md](02-domain-model.md) §8). A restore creates a new version from an old blob and resets approval.
+- There is no server checkpoint and no `editor_recovery` version in V1. A restore creates a new version from an old blob and resets approval.
 - The builder is the sole agent/offline DOCX mutator; `docx-core` is read/verify only. Reading for verification goes to the OOXML package directly (`lxml`), not through the editor API.
 - The editor gets no database credential; MavrykX owns identity, versions, permissions, approvals and audit.
 - A future live co-editing decision may implement the same edit-lease and save seam. V1 does not add CRDT, OT, cursors or a second document authority.
@@ -290,11 +292,11 @@ This is engineering sequence, not product releases. Steps 1–6 are the legal CR
 
 **Step 0 — verification spine (exists).** The scaffold, operation registry, boundary checks, baseline schema, RLS probes and `tools.verify` gate. Every later step keeps them green.
 
-1. **Firm, users, memberships and roles.** Firm bootstrap, admin/lawyer/staff membership, sessions, devices and the audit actor. Gate: a firm admin without Matter membership reads no Matter content.
+1. **Firm, users, memberships and roles.** Firm bootstrap, admin/lawyer/staff/intern membership, sessions, devices and the audit actor. Gate: a firm admin reads every Matter by role; a non-member reads none.
 2. **Clients, contacts and Matters.** Contact deduplication, client with many Matters, Matter open/close, the matter-open gate, parties and notes-first intake. Gate: a client with two Matters is isolated; a Matter can exist with a note and no client.
-3. **Shared Matter workspace and resource permissions.** Matter `lead`/`editor`/`viewer`/`approver` grants, sections, private/shared/restricted visibility, resource grants, walls, the one access policy, the workspace change feed and cross-resource audit. Gate: cross-Matter, wall and grant negative tests pass for sections and the shared policy; each resource added in steps 4–5 extends the same fixtures before its surface ships.
-4. **Documents, Euro-Office, versions and audit.** Upload, local editor, edit lease, base-bound save, immutable versions, compare, restore, tracked changes, proposals and hash-bound approval. Gate: two users edit sequentially with no silent overwrite; a stale save is refused; restricted-document grants hold for versions and annotations.
-5. **Notes, tasks, assignments, events and conversations.** Notes with headings, tasks and assignments, deadlines, appointments/hearings, conversations and messages, and research submissions as task + version + approval. Gate: every resource is attributed and audited; private note, task and conversation fixtures pass.
+3. **Shared Matter workspace and resource permissions.** Firm-admin Matter access, Matter `edit`/`view` grants, sections, restricted-document grants, the one access policy, the workspace change feed and cross-resource audit. Gate: a firm admin sees every Matter; a non-member sees no Matter; cross-Matter and grant negative tests pass for sections and the shared policy; each resource added in steps 4–5 extends the same fixtures before its surface ships.
+4. **Documents, Euro-Office, versions and audit.** Upload, local editor, edit lease, base-bound save, immutable versions, compare, restore, tracked changes, proposals and hash-bound approval. Gate: two users edit sequentially with no silent overwrite; a stale save is refused; restricted-document grants hold for versions, text, anchors, annotations, relations and chunks.
+5. **Notes, tasks, assignments, events and conversations.** Notes with headings, tasks and assignments, deadlines, appointments/hearings, Matter-wide conversations and messages, and research submissions as task + version + approval. Gate: every resource is attributed and audited; a Matter member reads every Matter resource, and a non-member reads none.
 6. **Review and approval workflows.** Submission, supervisor review, approve/return, notifications, the review inbox and the document status transitions. Gate: an intern submits, a supervisor returns, a new version is submitted and approved; the original survives.
 7. **Maverick AI Legal Harness on the completed CRM.** Tool catalog, gateway, bundles, context assembly, runs, proposals, approvals and the agent UI. The harness calls the CRM services; it adds no legal authority and no second data path. Gate: an intern's agent reads only the intern's resources and cannot approve.
 8. **First end-to-end legal workflow.** Pleading ingestion → fact extraction → legal research → memo drafting → lawyer review. This is the first legal-intelligence proof, not the first build step. Gate: a lawyer completes the workflow on a real Matter, every citation is verified or `unconfirmed`, and the memo is approved by a human.
@@ -307,13 +309,13 @@ This is engineering sequence, not product releases. Steps 1–6 are the legal CR
 
 **CRM and shared workspace.**
 
-- A firm has an admin, at least two lawyers and a staff/intern; roles and Matter access are enforced; a firm admin outside the Matter reads nothing.
+- A firm has an admin, at least two lawyers and a staff/intern; roles and Matter access are enforced; a firm admin reads every Matter; a non-member reads none.
 - A client holds two Matters; documents, notes, tasks, events, conversations and approvals never cross the Matter boundary.
 - Two lawyers and an intern work in one Matter. Each sees the latest saved shared state and the attribution for every change.
 - One user holds the document edit lease; another reads the latest version; a stale save is refused; the next save creates one immutable version.
 - A lease expires or is revoked; the next user can edit; an old save does not overwrite the new version.
 - Version comparison is read-only; restoring an old version creates a new version and resets approval.
-- A private note and private conversation are invisible to every other Matter member, including a `lead` or `approver`; a private task is visible only to its creator and assignee.
+- A Matter member reads every note, task and conversation in the Matter; a non-member reads none. A restricted document needs a resource grant, except for the firm admin; its version, text, anchors, annotations, relations and chunks follow the same grant.
 - An intern submits; the supervisor returns and later approves; the original version survives; every step is audited.
 - An agent proposal against a stale base is detected; it never overwrites a human save or the current version.
 - Every workspace resource write has an audit event; a missing event fails a fixture.
@@ -330,7 +332,7 @@ This is engineering sequence, not product releases. Steps 1–6 are the legal CR
 - An intern's agent inherits the intern's grants, cannot read a restricted document and cannot approve.
 - Import layers, table ownership, renderer isolation and no-god-file checks fail a broken fixture.
 
-**Schema smoke test (executed).** On PostgreSQL 17.12 + pgvector, `0001_core.sql` runs from empty and `0002_rls_test.sql` passes: 97 `app` tables, 0 without RLS, 0 `matter_id` tables without a policy; the isolation, wall, application-tree and audit-chain probes pass. The workspace step adds no table for a section; it uses `folder`. The baseline retains the unused shared-session checkpoint columns and `editor_recovery` source. The private-note, private-task and private-trace policy narrowing, and the restricted-document child policies, are forward migrations and must land before those resources are exposed.
+**Schema smoke test (target run pending).** The proposed schema is `0001_core.sql` with `0002_rls_test.sql`. A vector-free copy passed the SQL parse and RLS probes on PostgreSQL 18; the target run on PostgreSQL 17.12 + pgvector 0.8.7 is pending and must pass before step 1. The expected result is 95 `app` tables, 0 without RLS, 0 `matter_id` tables without a policy, and passing probes for Matter isolation, firm-admin access, restricted-document child access, the application tree and the audit chain. The workspace step adds no table for a section; it uses `folder`.
 
 ---
 

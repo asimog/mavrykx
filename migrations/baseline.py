@@ -5,4 +5,4 @@ from __future__ import annotations
 from pathlib import Path
 
 BASELINE = Path(__file__).resolve().parents[1] / "docs" / "v1" / "schema" / "0001_core.sql"
-SHA256 = "47220b2ee5272ec9dafbf52d53b7d806aec290d6387d7d557a3a4cd011772856"
+SHA256 = "03bb5446caea7b52877594f681995f588e34048e363551bd25c33468869ef9a2"

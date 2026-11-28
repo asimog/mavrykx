@@ -127,7 +127,7 @@ create table app.membership (
   id             uuid primary key default gen_random_uuid(),
   user_id        uuid not null references app.user(id) on delete cascade,
   firm_id        uuid not null references app.firm(id) on delete cascade,
-  role           text not null check (role in ('admin','lawyer','staff')),
+  role           text not null check (role in ('admin','lawyer','staff','intern')),
   title          text,
   disabled_at    timestamptz,
   created_at     timestamptz not null default now(),
@@ -172,7 +172,7 @@ create table app.matter (
   status         text not null default 'intake' check (status in
                    ('intake','gate_pending','active','on_hold','closed','archived')),
   confidentiality text not null default 'normal' check (confidentiality in ('normal','high','restricted')),
-  lead_user_id   uuid not null references app.user(id),
+  responsible_user_id uuid not null references app.user(id),
   opened_at      timestamptz,
   closed_at      timestamptz,
   retention_until date,
@@ -187,24 +187,13 @@ create table app.matter_member (
   id             uuid primary key default gen_random_uuid(),
   matter_id      uuid not null references app.matter(id) on delete cascade,
   user_id        uuid not null references app.user(id) on delete cascade,
-  access         text not null check (access in ('lead','editor','viewer','approver')),
+  access         text not null check (access in ('edit','view')),
   granted_by     uuid not null references app.user(id),
   granted_at     timestamptz not null default now(),
   revoked_at     timestamptz
 );
 create unique index matter_member_user on app.matter_member (matter_id, user_id)
   where revoked_at is null;
-
-create table app.ethical_wall (
-  id             uuid primary key default gen_random_uuid(),
-  matter_id      uuid not null references app.matter(id) on delete cascade,
-  user_id        uuid not null references app.user(id) on delete cascade,
-  reason         text not null,
-  created_by     uuid not null references app.user(id),
-  created_at     timestamptz not null default now(),
-  revoked_at     timestamptz
-);
-create index ethical_wall_lookup on app.ethical_wall (matter_id, user_id);
 
 create table app.matter_party (
   id             uuid primary key default gen_random_uuid(),
@@ -395,7 +384,7 @@ create index deadline_open on app.deadline (status, due_at) where status in ('pr
 
 create table app.appointment (
   id             uuid primary key default gen_random_uuid(),
-  matter_id      uuid references app.matter(id) on delete cascade,
+  matter_id      uuid not null references app.matter(id) on delete cascade,
   title          text not null,
   starts_at      timestamptz not null,
   ends_at        timestamptz not null,
@@ -410,7 +399,6 @@ create table app.note (
   id             uuid primary key default gen_random_uuid(),
   matter_id      uuid not null references app.matter(id) on delete cascade,
   author_id      uuid not null references app.user(id),
-  visibility     text not null default 'matter' check (visibility in ('private','matter','firm')),
   body           text not null,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -508,6 +496,7 @@ create table app.document_version (
   base_version_id uuid references app.document_version(id),
   source         text not null check (source in
                    ('upload','agent_generated','editor_save','import','template','export')),
+  idempotency_key text,
   created_by     uuid references app.user(id),
   created_run_id uuid,
   origin_task_id uuid references app.task(id),
@@ -519,6 +508,9 @@ create table app.document_version (
 );
 create index document_version_current on app.document_version (document_id, version_no desc);
 create index document_version_blob on app.document_version (blob_sha256);
+create unique index document_version_idempotency
+  on app.document_version (document_id, idempotency_key)
+  where idempotency_key is not null;
 
 -- Derived text is rebuildable; text_hash pins the exact text an extraction was
 -- built from (RD-61). A re-OCR changes the hash and marks dependent extractions
@@ -1178,14 +1170,6 @@ alter table app.session
 -- The Matter is the only shared boundary; there is no proceeding relation.
 -- ---------------------------------------------------------------------------
 
-alter table app.conversation
-  add column if not exists visibility text not null default 'private'
-    check (visibility in ('private','shared','matter'));
-
-alter table app.task
-  add column if not exists visibility text not null default 'matter'
-    check (visibility in ('matter','private'));
-
 alter table app.proceeding
   add column if not exists impugned_order_id uuid references app."order"(id) on delete set null,
   add column if not exists originating_proceeding_id uuid references app.proceeding(id) on delete set null,
@@ -1200,7 +1184,7 @@ alter table app.document_version
   drop constraint if exists document_version_source_check;
 alter table app.document_version
   add constraint document_version_source_check check (source in
-    ('upload','agent_generated','editor_save','editor_recovery','import','template','export'));
+    ('upload','agent_generated','editor_save','import','template','export'));
 
 alter table app.agent_run
   add column if not exists node_id uuid,
@@ -1230,10 +1214,10 @@ alter table app.context_package
 create table app.resource_grant (
   id             uuid primary key default gen_random_uuid(),
   matter_id      uuid not null references app.matter(id) on delete cascade,
-  resource_type  text not null check (resource_type in ('document','conversation','task')),
+  resource_type  text not null check (resource_type in ('document')),
   resource_id    uuid not null,
   subject_user_id uuid not null references app.user(id) on delete cascade,
-  level          text not null check (level in ('view','comment','edit','post')),
+  level          text not null check (level in ('view','comment','edit')),
   granted_by     uuid not null references app.user(id),
   created_at     timestamptz not null default now(),
   revoked_at     timestamptz,
@@ -1277,14 +1261,16 @@ create table app.editing_session (
   provider_key    text not null unique,
   provider        text not null default 'euro_office' check (provider in ('euro_office')),
   status          text not null default 'opening' check (status in
-                    ('opening','active','closing','closed','failed','revoked')),
+                    ('opening','active','closing','closed','failed','revoked','expired')),
   opened_by       uuid not null references app.user(id),
   opened_at       timestamptz not null default now(),
   last_heartbeat_at timestamptz,
   closed_at       timestamptz,
   result_version_id uuid references app.document_version(id),
-  checkpoint_sha256 text,
-  checkpoint_at   timestamptz,
+  takeover_requested_by uuid references app.user(id),
+  takeover_requested_at timestamptz,
+  takeover_approved_by uuid references app.user(id),
+  takeover_approved_at timestamptz,
   failure_code    text
 );
 create unique index editing_session_active on app.editing_session (document_id)
@@ -1294,16 +1280,6 @@ create index editing_session_document on app.editing_session (document_id, opene
 alter table app.document_version
   add constraint document_version_editing_session_fk
   foreign key (editing_session_id) references app.editing_session(id) on delete set null;
-
-create table app.editing_session_participant (
-  session_id uuid not null references app.editing_session(id) on delete cascade,
-  user_id    uuid not null references app.user(id) on delete cascade,
-  matter_id  uuid not null references app.matter(id) on delete cascade,
-  joined_at  timestamptz not null default now(),
-  left_at    timestamptz,
-  role       text not null default 'editor' check (role in ('editor','viewer','reviewer')),
-  primary key (session_id, user_id)
-);
 
 create table app.document_proposal (
   id              uuid primary key default gen_random_uuid(),
@@ -1628,8 +1604,16 @@ create table audit.audit_event (
   seq            bigint generated always as identity primary key,
   id             uuid not null default gen_random_uuid(),
   at             timestamptz not null default now(),
-  actor_type     text not null check (actor_type in ('user','agent','system')),
+  actor_type     text not null check (actor_type in ('user','agent','system','service')),
   actor_id       uuid,
+  actor_ref      text,
+  trigger_type   text not null default 'direct' check (trigger_type in
+                   ('direct','delegation','schedule')),
+  run_id         uuid references app.agent_run(id) on delete set null,
+  initiating_user_id uuid references app.user(id),
+  approval_status text check (approval_status in
+                   ('pending','approved','rejected','expired','stale')),
+  approver_id    uuid references app.user(id),
   action         text not null,
   subject_type   text not null,
   subject_id     uuid,
@@ -1652,7 +1636,10 @@ begin
   select hash into v_prev from audit.audit_event order by seq desc limit 1;
   v_body := concat_ws('|',
     coalesce(new.seq::text,''), coalesce(new.id::text,''), coalesce(new.at::text,''),
-    coalesce(new.actor_type,''), coalesce(new.actor_id::text,''),
+    coalesce(new.actor_type,''), coalesce(new.actor_id::text,''), coalesce(new.actor_ref,''),
+    coalesce(new.trigger_type,''), coalesce(new.run_id::text,''),
+    coalesce(new.initiating_user_id::text,''), coalesce(new.approval_status,''),
+    coalesce(new.approver_id::text,''),
     new.action, new.subject_type, coalesce(new.subject_id::text,''),
     coalesce(new.matter_id::text,''), coalesce(new.request_id,''),
     new.payload::text);
@@ -1665,23 +1652,35 @@ create trigger audit_event_chain
   before insert on audit.audit_event
   for each row execute function audit.append_event();
 
+drop function if exists audit.append(text,uuid,text,text,uuid,uuid,text,jsonb);
+
 create or replace function audit.append(
   p_actor_type text, p_actor_id uuid, p_action text,
   p_subject_type text, p_subject_id uuid, p_matter_id uuid,
-  p_request_id text, p_payload jsonb
+  p_request_id text, p_payload jsonb,
+  p_actor_ref text default null,
+  p_trigger_type text default 'direct',
+  p_run_id uuid default null,
+  p_initiating_user_id uuid default null,
+  p_approval_status text default null,
+  p_approver_id uuid default null
 ) returns bigint
 language sql security definer
 set search_path = audit, pg_temp as $$
   insert into audit.audit_event
-    (actor_type, actor_id, action, subject_type, subject_id, matter_id, request_id, payload)
-  values (p_actor_type, p_actor_id, p_action, p_subject_type, p_subject_id,
-          p_matter_id, p_request_id, coalesce(p_payload,'{}'::jsonb))
+    (actor_type, actor_id, actor_ref, trigger_type, run_id, initiating_user_id,
+     approval_status, approver_id, action, subject_type, subject_id, matter_id,
+     request_id, payload)
+  values (p_actor_type, p_actor_id, p_actor_ref, p_trigger_type, p_run_id,
+          p_initiating_user_id, p_approval_status, p_approver_id, p_action,
+          p_subject_type, p_subject_id, p_matter_id, p_request_id,
+          coalesce(p_payload,'{}'::jsonb))
   returning seq
 $$;
 
-revoke all on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb) from public;
-grant execute on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb) to maverick_app;
-alter function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb) owner to maverick_owner;
+revoke all on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb,text,text,uuid,uuid,text,uuid) from public;
+grant execute on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb,text,text,uuid,uuid,text,uuid) to maverick_app;
+alter function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb,text,text,uuid,uuid,text,uuid) owner to maverick_owner;
 alter function audit.append_event() owner to maverick_owner;
 
 -- ---------------------------------------------------------------------------
@@ -1798,35 +1797,20 @@ set search_path = app, pg_temp as $$
   )
 $$;
 
--- Is this user walled off from this matter? Deny is a separate question
--- from membership, so it can be used by the bootstrap policies too.
-create or replace function app.is_walled(p_matter uuid)
-returns boolean
-language sql stable security definer
-set search_path = app, pg_temp as $$
-  select exists (
-    select 1 from app.ethical_wall w
-    where w.matter_id = p_matter
-      and w.revoked_at is null
-      and w.user_id = app.current_user()
-  )
-$$;
-
--- One boolean: may this user see this matter? Deny wins.
+-- One boolean: may this user see this matter? A firm admin sees every Matter.
 create or replace function app.has_matter_access(p_matter uuid)
 returns boolean
 language sql stable security definer
 set search_path = app, pg_temp as $$
-  select exists (
+  select app.is_admin() or exists (
     select 1 from app.matter_member mm
     where mm.matter_id = p_matter
       and mm.revoked_at is null
       and mm.user_id = app.current_user()
   )
-  and not app.is_walled(p_matter)
 $$;
 
--- A grant on one resource; it never widens beyond the Matter or overrides a wall.
+-- A grant on one restricted document; it never widens beyond the Matter.
 create or replace function app.has_resource_grant(
   p_type text, p_id uuid, p_level text default 'view'
 ) returns boolean
@@ -1840,10 +1824,10 @@ set search_path = app, pg_temp as $$
       and g.revoked_at is null
       and case g.level
             when 'view' then 1 when 'comment' then 2
-            when 'post' then 2 when 'edit' then 3 else 0 end
+            when 'edit' then 3 else 0 end
           >= case p_level
             when 'view' then 1 when 'comment' then 2
-            when 'post' then 2 when 'edit' then 3 else 0 end
+            when 'edit' then 3 else 0 end
   )
 $$;
 
@@ -1855,73 +1839,59 @@ set search_path = app, pg_temp as $$
     select 1 from app.document d
     where d.id = p_document
       and app.has_matter_access(d.matter_id)
-      and (d.confidentiality = 'matter'
-           or app.has_resource_grant('document', d.id, 'view'))
-  )
-$$;
-
-create or replace function app.can_read_conversation(p_conversation uuid)
-returns boolean
-language sql stable security definer
-set search_path = app, pg_temp as $$
-  select exists (
-    select 1 from app.conversation c
-    where c.id = p_conversation
-      and app.has_matter_access(c.matter_id)
       and (
-        c.user_id = app.current_user()
-        or (c.visibility = 'matter')
-        or (c.visibility = 'shared'
-            and app.has_resource_grant('conversation', c.id, 'view'))
+        app.is_admin()
+        or d.confidentiality = 'matter'
+        or app.has_resource_grant('document', d.id, 'view')
       )
   )
 $$;
 
-create or replace function app.can_read_task(p_task uuid)
+create or replace function app.has_document_version_access(p_version uuid)
 returns boolean
 language sql stable security definer
 set search_path = app, pg_temp as $$
   select exists (
-    select 1 from app.task t
-    where t.id = p_task
-      and app.has_matter_access(t.matter_id)
-      and (
-        t.visibility = 'matter'
-        or t.created_by = app.current_user()
-        or t.assignee_id = app.current_user()
-        or app.is_admin()
-      )
+    select 1 from app.document_version dv
+    where dv.id = p_version
+      and app.has_document_access(dv.document_id)
   )
+$$;
+
+create or replace function app.has_document_relation_access(
+  p_from_document uuid, p_to_document uuid
+) returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.has_document_access(p_from_document)
+     and app.has_document_access(p_to_document)
 $$;
 
 revoke all on function app.current_user() from public;
 revoke all on function app.is_member() from public;
 revoke all on function app.is_admin() from public;
-revoke all on function app.is_walled(uuid) from public;
 revoke all on function app.has_matter_access(uuid) from public;
 revoke all on function app.has_resource_grant(text,uuid,text) from public;
 revoke all on function app.has_document_access(uuid) from public;
-revoke all on function app.can_read_conversation(uuid) from public;
-revoke all on function app.can_read_task(uuid) from public;
+revoke all on function app.has_document_version_access(uuid) from public;
+revoke all on function app.has_document_relation_access(uuid,uuid) from public;
 grant execute on function app.current_user() to maverick_app, maverick_readonly;
 grant execute on function app.is_member() to maverick_app, maverick_readonly;
 grant execute on function app.is_admin() to maverick_app, maverick_readonly;
-grant execute on function app.is_walled(uuid) to maverick_app, maverick_readonly;
 grant execute on function app.has_matter_access(uuid) to maverick_app, maverick_readonly;
 grant execute on function app.has_resource_grant(text,uuid,text) to maverick_app, maverick_readonly;
 grant execute on function app.has_document_access(uuid) to maverick_app, maverick_readonly;
-grant execute on function app.can_read_conversation(uuid) to maverick_app, maverick_readonly;
-grant execute on function app.can_read_task(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_version_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_relation_access(uuid,uuid) to maverick_app, maverick_readonly;
 
 alter function app.current_user() owner to maverick_owner;
 alter function app.is_member() owner to maverick_owner;
 alter function app.is_admin() owner to maverick_owner;
-alter function app.is_walled(uuid) owner to maverick_owner;
 alter function app.has_matter_access(uuid) owner to maverick_owner;
 alter function app.has_resource_grant(text,uuid,text) owner to maverick_owner;
 alter function app.has_document_access(uuid) owner to maverick_owner;
-alter function app.can_read_conversation(uuid) owner to maverick_owner;
-alter function app.can_read_task(uuid) owner to maverick_owner;
+alter function app.has_document_version_access(uuid) owner to maverick_owner;
+alter function app.has_document_relation_access(uuid,uuid) owner to maverick_owner;
 
 -- ---------------------------------------------------------------------------
 -- RLS: every table with matter_id gets the same policy
@@ -1933,7 +1903,7 @@ begin
     select c.table_name
     from information_schema.columns c
     where c.table_schema = 'app' and c.column_name = 'matter_id'
-      and c.table_name not in ('matter_member','ethical_wall')
+      and c.table_name not in ('matter_member')
   loop
     execute format('alter table app.%I enable row level security', t.table_name);
     execute format('alter table app.%I force row level security', t.table_name);
@@ -1950,23 +1920,44 @@ drop policy if exists document_matter on app.document;
 create policy document_access on app.document for all
   using (app.has_document_access(id))
   with check (app.has_matter_access(matter_id)
-              and (confidentiality = 'matter'
+              and (app.is_admin()
+                   or confidentiality = 'matter'
                    or app.has_resource_grant('document', id, 'edit')));
+-- The access function reads this table as the migration owner. The app role is
+-- still subject to the policy. NO FORCE prevents recursion through the function.
+alter table app.document no force row level security;
 
-drop policy if exists conversation_matter on app.conversation;
-create policy conversation_access on app.conversation for all
-  using (app.can_read_conversation(id))
-  with check (app.has_matter_access(matter_id));
+drop policy if exists document_version_matter on app.document_version;
+create policy document_version_access on app.document_version for all
+  using (app.has_document_access(document_id))
+  with check (app.has_document_access(document_id));
 
-drop policy if exists task_matter on app.task;
-create policy task_access on app.task for all
-  using (app.can_read_task(id))
-  with check (app.has_matter_access(matter_id));
+drop policy if exists document_text_matter on app.document_text;
+create policy document_text_access on app.document_text for all
+  using (app.has_document_version_access(document_version_id))
+  with check (app.has_document_version_access(document_version_id));
 
-drop policy if exists message_matter on app.message;
-create policy message_access on app.message for all
-  using (app.can_read_conversation(conversation_id))
-  with check (app.can_read_conversation(conversation_id));
+drop policy if exists document_anchor_matter on app.document_anchor;
+create policy document_anchor_access on app.document_anchor for all
+  using (app.has_document_version_access(document_version_id))
+  with check (app.has_document_version_access(document_version_id));
+
+drop policy if exists annotation_matter on app.annotation;
+create policy annotation_access on app.annotation for all
+  using (app.has_document_version_access(document_version_id))
+  with check (app.has_document_version_access(document_version_id));
+
+drop policy if exists document_chunk_matter on app.document_chunk;
+create policy document_chunk_access on app.document_chunk for all
+  using (app.has_document_version_access(document_version_id))
+  with check (app.has_document_version_access(document_version_id));
+
+drop policy if exists document_relation_matter on app.document_relation;
+create policy document_relation_access on app.document_relation for all
+  using (app.has_document_relation_access(from_document_id, to_document_id))
+  with check (app.has_matter_access(matter_id)
+              and app.has_document_access(from_document_id)
+              and app.has_document_access(to_document_id));
 
 drop policy if exists editing_session_matter on app.editing_session;
 create policy editing_session_access on app.editing_session for all
@@ -1978,31 +1969,6 @@ create policy document_proposal_access on app.document_proposal for all
   using (app.has_document_access(document_id))
   with check (app.has_document_access(document_id));
 
-drop policy if exists agent_run_matter on app.agent_run;
-create policy agent_run_access on app.agent_run for all
-  using (app.has_matter_access(matter_id)
-         and (app.is_admin()
-              or user_id = app.current_user()
-              or (conversation_id is not null
-                  and app.can_read_conversation(conversation_id))))
-  with check (app.has_matter_access(matter_id)
-              and (app.is_admin() or user_id = app.current_user()
-                   or (conversation_id is not null
-                       and app.can_read_conversation(conversation_id))));
-
-drop policy if exists context_package_matter on app.context_package;
-create policy context_package_access on app.context_package for all
-  using (exists (
-    select 1 from app.agent_run r
-    where r.id = context_package.run_id
-      and r.user_id = app.current_user()
-  ) or app.is_admin())
-  with check (exists (
-    select 1 from app.agent_run r
-    where r.id = context_package.run_id
-      and r.user_id = app.current_user()
-  ) or app.is_admin());
-
 drop policy if exists notification_matter on app.notification;
 create policy notification_recipient on app.notification for all
   using (recipient_user_id = app.current_user() or app.is_admin())
@@ -2013,15 +1979,15 @@ create policy resource_grant_read on app.resource_grant for select using (
   app.is_admin()
   or subject_user_id = app.current_user()
   or exists (select 1 from app.matter m
-             where m.id = matter_id and m.lead_user_id = app.current_user()));
+             where m.id = matter_id and m.responsible_user_id = app.current_user()));
 create policy resource_grant_write on app.resource_grant for all using (
   app.is_admin()
   or exists (select 1 from app.matter m
-             where m.id = matter_id and m.lead_user_id = app.current_user()))
+             where m.id = matter_id and m.responsible_user_id = app.current_user()))
   with check (
   app.is_admin()
   or exists (select 1 from app.matter m
-             where m.id = matter_id and m.lead_user_id = app.current_user()));
+             where m.id = matter_id and m.responsible_user_id = app.current_user()));
 
 drop policy if exists job_matter on app.job;
 create policy job_access on app.job for all
@@ -2049,12 +2015,6 @@ alter table app.matter force row level security;
 create policy matter_access on app.matter
   for all using (app.has_matter_access(id)) with check (app.has_matter_access(id));
 
--- bootstrap: the lead can see the matter before the grant row exists,
--- because the service creates both in one transaction. A wall still wins.
-create policy matter_lead on app.matter
-  for all using (lead_user_id = app.current_user() and not app.is_walled(id))
-  with check (lead_user_id = app.current_user() and not app.is_walled(id));
-
 -- a relation is visible only if the user can see the source matter.
 alter table app.matter_relation enable row level security;
 create policy matter_relation_access on app.matter_relation
@@ -2077,37 +2037,12 @@ create policy membership_self on app.membership
 create policy membership_admin on app.membership
   for all using (app.is_admin()) with check (app.is_admin());
 
--- matter grants: a user sees their own grant; admins and the matter lead manage.
+-- matter grants: a user sees their own grant; an admin manages every grant.
 alter table app.matter_member enable row level security;
 create policy matter_member_self on app.matter_member
   for select using (user_id = app.current_user());
 create policy matter_member_admin on app.matter_member
   for all using (app.is_admin()) with check (app.is_admin());
-create policy matter_member_lead on app.matter_member
-  for all using (
-    exists (select 1 from app.matter m
-            where m.id = matter_id and m.lead_user_id = app.current_user()
-              and not app.is_walled(m.id))
-  )
-  with check (
-    exists (select 1 from app.matter m
-            where m.id = matter_id and m.lead_user_id = app.current_user()
-              and not app.is_walled(m.id))
-  );
-
--- ethical walls are conflict metadata: admins see them; a lead may create one.
-alter table app.ethical_wall enable row level security;
-create policy ethical_wall_admin on app.ethical_wall
-  for all using (app.is_admin()) with check (app.is_admin());
-create policy ethical_wall_lead on app.ethical_wall
-  for all using (
-    exists (select 1 from app.matter m
-            where m.id = matter_id and m.lead_user_id = app.current_user())
-  )
-  with check (
-    exists (select 1 from app.matter m
-            where m.id = matter_id and m.lead_user_id = app.current_user())
-  );
 
 -- firm-wide reference and people data
 do $$
@@ -2209,7 +2144,7 @@ grant select on ref.document_type to maverick_app, maverick_readonly;
 grant select on audit.audit_event to maverick_app, maverick_readonly;
 grant usage, select on all sequences in schema app, audit to maverick_app;
 grant execute on all functions in schema app to maverick_app;
-grant execute on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb) to maverick_app;
+grant execute on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb,text,text,uuid,uuid,text,uuid) to maverick_app;
 
 -- Legal-hold and deletion tables are deliberately absent here; they follow
 -- the same matter_id + RLS pattern. See 04-data-and-storage.md §10.
@@ -2227,7 +2162,7 @@ insert into ops.table_owner (table_name, module) values
   ('firm','identity'), ('user','identity'), ('membership','identity'), ('session','identity'), ('device','identity'),
   ('execution_node','identity'),
   ('matter','matter'), ('matter_relation','matter'), ('matter_party','matter'), ('note','matter'),
-  ('matter_member','access'), ('ethical_wall','access'), ('reuse_grant','access'), ('resource_grant','access'),
+  ('matter_member','access'), ('reuse_grant','access'), ('resource_grant','access'),
   ('contact','contacts'), ('client','contacts'),
   ('forum','courts'), ('forum_adapter','forum_adapters'),
   ('proceeding','proceedings'), ('proceeding_application','proceedings'), ('hearing','proceedings'),
@@ -2236,7 +2171,7 @@ insert into ops.table_owner (table_name, module) values
   ('folder','documents'), ('document','documents'), ('document_version','documents'),
   ('document_anchor','documents'), ('document_text','documents'), ('document_relation','documents'),
   ('document_chunk','documents'), ('annotation','documents'), ('editing_session','documents'),
-  ('editing_session_participant','documents'), ('document_proposal','documents'),
+  ('document_proposal','documents'),
   ('template','library'), ('library_item','library'), ('library_version','library'), ('library_grant','library'),
   ('blob','storage'),
   ('classification','classification'),

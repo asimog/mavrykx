@@ -44,7 +44,7 @@ Do not mix files between the two builds. The desktop package and the server pack
 
 The embedded editor opens a committed base version under an `editing_session` lease. The lease holder is the only user who may save. Another user who opens the document gets the latest committed version read-only.
 
-A save carries the lease id, base version, base hash and an idempotency key. The API locks the document row, verifies the lease and base, stores the blob and creates an immutable `document_version`. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`. The lease is released on close, expires on a missed heartbeat or is revoked by a Matter `lead`. There is no server checkpoint and no live buffer.
+A save carries the lease id, base version, base hash and an idempotency key. The API locks the document row, verifies the lease and base, stores the blob and creates an immutable `document_version`. A moved base is `DOC_STALE_BASE`; a lost lease is `DOC_SESSION_REVOKED`. The lease is released on close, expires on a missed heartbeat or is revoked by a firm admin or the responsible lawyer. There is no server checkpoint and no live buffer.
 
 **Peer-hosted sharing (deferred).** Any client could host. When a user shares a workspace, that client starts the bundled server pack, binds the host page and `DocService` to the LAN, and issues an invitation carrying host, port and a one-time token. The other user joins from their own client. When the last participant leaves or the host stops sharing, the server pack stops. A share is a session, not a service: the host's app must stay open and the machine awake. This paragraph is retained for the deferred option and is not a V1 requirement.
 
@@ -244,7 +244,7 @@ The intended workflow — "user tells the agent to approve all changes" — is p
 
 An agent without a grant can propose, diff and request. It cannot accept, commit or approve. A tool-schema check is not the lock; the server is.
 
-In a multi-user Matter, a `lead` or `approver` reviews and approves; the author does not approve their own submission where another eligible reviewer exists. In a one-person firm the sole practitioner may self-approve, recorded as a self-review with the same version hash and audit. An agent never approves.
+In a multi-user Matter, a firm admin or a lawyer with Matter `edit` access reviews and approves; the author does not approve their own submission where another eligible reviewer exists. In a one-person firm the sole practitioner may self-approve, recorded as a self-review with the same version hash and audit. An agent never approves.
 
 ---
 
