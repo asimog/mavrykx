@@ -80,8 +80,8 @@ def test_rls_probes_on_a_disposable_database() -> None:
     assert _section(probes.stdout, "probe 2") == ["1"]
     assert _section(probes.stdout, "probe 4") == ["0"]
     assert _section(probes.stdout, "probe 5") == ["0"]
-    assert _section(probes.stdout, "probe 6") == ["1"]
-    assert _section(probes.stdout, "audit") == ["2|t", "t"]
+    assert _section(probes.stdout, "probe 6") == ["0"]
+    assert _section(probes.stdout, "audit") == ["3|t", "t"]
 
     assert 'row-level security policy for table "document"' in probes.stderr
     assert "application parent not found" in probes.stderr
