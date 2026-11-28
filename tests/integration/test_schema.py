@@ -89,4 +89,5 @@ def test_rls_probes_on_a_disposable_database() -> None:
     assert "application parent not found" in probes.stderr
     assert "application nesting deeper than 6" in probes.stderr
     assert "application matter and parent are immutable" in probes.stderr
-    assert probes.stderr.count("ERROR:") == 5
+    assert "only an admin may promote an admin" in probes.stderr
+    assert probes.stderr.count("ERROR:") == 6

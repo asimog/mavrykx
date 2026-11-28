@@ -4,11 +4,15 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typer import Typer
 
-from mavrykx.application.registry import OPERATIONS, Operation
+from mavrykx.application.registry import Operation
 from mavrykx.application.system import SystemService
+from mavrykx.composition.operations import OPERATIONS
+from mavrykx.domain.actor import Actor
+from mavrykx.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from mavrykx.interfaces.api.app import build_app
 from mavrykx.interfaces.cli.app import build_cli
 from mavrykx.interfaces.tools.catalog import TOOLS, ToolEntry
+from mavrykx.modules.identity.api import IdentityService
 from tools import operations
 
 NEGATIVE = Path(__file__).resolve().parents[1] / "negative"
@@ -22,9 +26,20 @@ def _call(_request: BaseModel) -> BaseModel:
     return _Empty()
 
 
+def _unavailable(_actor: Actor) -> SqlAlchemyUnitOfWork:
+    raise RuntimeError("the parity test never opens a transaction")
+
+
+def _identity() -> IdentityService:
+    return IdentityService(_unavailable)
+
+
 def test_real_surfaces_have_parity() -> None:
     findings = operations.check_parity(
-        OPERATIONS, build_app(SystemService()), build_cli(SystemService()), TOOLS
+        OPERATIONS,
+        build_app(SystemService(), _identity()),
+        build_cli(SystemService(), _identity()),
+        TOOLS,
     )
     assert findings == []
 

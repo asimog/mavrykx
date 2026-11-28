@@ -79,13 +79,13 @@ def check() -> list[Finding]:
         )
         return findings
 
-    if database.versions != ("0001",):
+    if set(database.versions) != set(_heads()):
         findings.append(
             Finding(
                 "E8",
                 Path("migrations"),
                 None,
-                f"database is at {database.versions or 'no revision'}, expected 0001",
+                f"database is at {database.versions or 'no revision'}, expected {_heads()}",
                 "run alembic upgrade head",
             )
         )

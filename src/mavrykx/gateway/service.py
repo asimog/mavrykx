@@ -17,6 +17,10 @@ class HumanOnlyOperation(RuntimeError):
     """The operation requires a human and is never a tool."""
 
 
+class OperationNeedsActor(RuntimeError):
+    """The operation needs a database transaction and an actor, so a bare tool cannot call it."""
+
+
 class ToolGateway:
     """The one agent door: resolve, authorise, validate and call one service operation."""
 
@@ -29,6 +33,8 @@ class ToolGateway:
             raise UnknownOperation(operation_id)
         if operation.human_only:
             raise HumanOnlyOperation(operation_id)
+        if operation.call is None:
+            raise OperationNeedsActor(operation_id)
         request = operation.input_model.model_validate(arguments)
         result = operation.call(request)
         return operation.output_model.model_validate(result)

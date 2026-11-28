@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tools.findings import Finding
 
-SCAN_ROOTS = (Path("src"), Path("modules"), Path("tools"), Path("apps/desktop/src"))
+SCAN_ROOTS = (Path("src"), Path("tools"), Path("apps/desktop/src"))
 PYTHON_SUFFIXES = frozenset({".py"})
 TYPESCRIPT_SUFFIXES = frozenset({".ts", ".tsx"})
 EXCLUDED_PARTS = frozenset({"node_modules", "out", "dist", "__pycache__", ".venv"})

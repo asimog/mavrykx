@@ -53,6 +53,12 @@ CASES: tuple[NegativeCase, ...] = (
         "importlinter.domain.ini",
     ),
     NegativeCase("B6", "a cycle fails", "lint-imports", "importlinter.cycles.ini"),
+    NegativeCase(
+        "B1",
+        "a module importing another module's private file fails",
+        "lint-imports",
+        "importlinter.modules.ini",
+    ),
     NegativeCase("B4", "a renderer importing Node fails", "depcruise", "renderer_fs.ts"),
     NegativeCase(
         "B2",

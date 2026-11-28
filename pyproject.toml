@@ -8,6 +8,7 @@ dependencies = [
     "ag-ui-protocol==1.0.0",
     "alembic==1.20.1",
     "asyncpg==0.32.0",
+    "email-validator>=2.4.0",
     "fastapi==0.165.0",
     "opentelemetry-sdk==1.45.2",
     "pydantic==2.14.4",
@@ -20,6 +21,9 @@ dependencies = [
 
 [project.scripts]
 mavrykx = "mavrykx.root.cli:main"
+mavrykx-api = "mavrykx.root.api:main"
+mavrykx-worker = "mavrykx.root.worker:main"
+mavrykx-agent = "mavrykx.root.agent:main"
 
 [dependency-groups]
 dev = [
@@ -41,7 +45,7 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-src = ["src", "modules", "tools", "tests", "migrations"]
+src = ["src", "tools", "tests", "migrations"]
 extend-exclude = ["tests/negative", "vendor"]
 
 [tool.ruff.lint]
@@ -49,10 +53,10 @@ select = ["E", "F", "I", "B", "UP", "SIM", "ARG", "PTH", "TRY", "BLE", "RUF", "S
 ignore = ["TRY003"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mavrykx", "modules", "tools", "migrations", "tests"]
+known-first-party = ["mavrykx", "tools", "migrations", "tests"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S404", "S603", "S607"]
+"tests/**" = ["S101", "S105", "S106", "S404", "S603", "S607"]
 "tools/**" = ["S404", "S603", "S607"]
 
 [tool.mypy]
@@ -61,7 +65,7 @@ strict = true
 plugins = ["pydantic.mypy"]
 warn_unreachable = true
 disallow_any_explicit = true
-files = ["src", "modules", "tools", "migrations"]
+files = ["src", "tools", "migrations"]
 mypy_path = "src"
 exclude = ["tests/negative"]
 

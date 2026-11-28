@@ -214,7 +214,10 @@ evidence. This section records the architecture-level choices; it does not repea
 ### Public and private
 
 - Public per module: `api.py`, `contracts.py`, `service.py`, shared DTOs.
-- Private: `models.py`, `repository.py`, `mappers.py`, `internal/`, migrations, SQL and tests.
+- Private: `domain.py`, `models.py`, `repository.py`, `mappers.py`, `internal/`, migrations, SQL
+  and tests.
+- A module’s `domain.py` holds the entities it owns; `mavrykx.domain` holds only primitives and
+  policies shared by two or more modules.
 - The `ops.table_owner` manifest names one owner per table.
 
 ### Required boundary checks
@@ -263,6 +266,9 @@ The enforcement plan owns the rule catalogue and records which checks are wired.
 ## 8. Deployment and operations
 
 - Target packaging: a signed Windows installer for the desktop and a signed Windows/Linux server installer. No Docker dependency; a development machine may use a disposable PostgreSQL container for tests, never the product.
+- The installer carries an embeddable CPython runtime and a resolved virtual environment alongside the
+  editor and PostgreSQL. Electron main starts and supervises the API, worker and agent as child
+  processes and stops them on quit; nothing runs at login.
 - Bundled PostgreSQL, localhost-only; clients talk to the API, never the database.
 - No data migration from a prior product. The baseline is the working schema and may be edited when
   schema, code and tests change together; use a forward-only numbered revision when data must be preserved.

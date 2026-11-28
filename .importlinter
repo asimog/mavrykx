@@ -25,6 +25,7 @@ source_modules =
 forbidden_modules =
     mavrykx.infrastructure
     mavrykx.interfaces
+    mavrykx.modules
     mavrykx.agent
     mavrykx.gateway
     mavrykx.composition
@@ -57,8 +58,10 @@ layers =
     mavrykx.root
     mavrykx.composition
     mavrykx.agent
-    mavrykx.interfaces | mavrykx.infrastructure
+    mavrykx.interfaces
     mavrykx.gateway
+    mavrykx.modules
+    mavrykx.infrastructure
     mavrykx.application
     mavrykx.domain
 

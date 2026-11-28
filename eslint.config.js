@@ -16,6 +16,9 @@ export default tseslint.config(
       '**/.ruff_cache/**',
       'tests/negative/**',
       'vendor/**',
+      '.reference/**',
+      '.agents/**',
+      '.opencode/**',
     ],
   },
   {

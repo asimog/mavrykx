@@ -9,11 +9,15 @@ from pathlib import Path
 from fastapi import FastAPI
 from typer import Typer
 
-from mavrykx.application.registry import OPERATIONS, Operation
+from mavrykx.application.registry import Operation
 from mavrykx.application.system import SystemService
+from mavrykx.composition.operations import OPERATIONS
+from mavrykx.domain.actor import Actor
+from mavrykx.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from mavrykx.interfaces.api.app import build_app
 from mavrykx.interfaces.cli.app import build_cli
 from mavrykx.interfaces.tools.catalog import TOOLS, ToolEntry
+from mavrykx.modules.identity.api import IdentityService
 from tools.findings import Finding
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +25,17 @@ INTERFACES = ROOT / "src" / "mavrykx" / "interfaces"
 BANNED = (ast.If, ast.Match, ast.For, ast.While, ast.Try)
 
 
+def _unavailable_unit_of_work(_actor: Actor) -> SqlAlchemyUnitOfWork:
+    raise RuntimeError("the parity check never opens a transaction")
+
+
 def check() -> list[Finding]:
+    identity = IdentityService(_unavailable_unit_of_work)
     findings = check_parity(
-        OPERATIONS, build_app(SystemService()), build_cli(SystemService()), TOOLS
+        OPERATIONS,
+        build_app(SystemService(), identity),
+        build_cli(SystemService(), identity),
+        TOOLS,
     )
     findings.extend(check_branches([INTERFACES]))
     return findings

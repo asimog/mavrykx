@@ -26,7 +26,7 @@ lockfile is a target pin, not an installed dependency.
 | DB | `sqlalchemy[asyncio]` | `2.1.9` | async ORM and migrations |
 | DB driver | `asyncpg` | `0.32.0` | |
 | Migrations | `alembic` | `1.20.1` | baseline `0001_core.sql`; mutable with schema/code/tests; forward-only when data-preserving |
-| Execution engine | `dbos` | `3.7.0` | optional behind `ExecutionEngine`; not installed |
+| Execution engine | `pgtask` | `0.4.0` | PostgreSQL journal through `PGTaskDurability`; DBOS is the deferred alternative behind `ExecutionEngine` |
 | CLI | `typer` | `0.29.3` | |
 | UI protocol | `ag-ui-protocol` | `1.0.0` | |
 | Telemetry | `opentelemetry-sdk` | `1.45.2` | |
@@ -102,9 +102,9 @@ lockfile is a target pin, not an installed dependency.
 
 ## 2. Layout
 
-The tree is the target shape. Today `src/mavrykx` contains the layer packages and stubs, `apps/desktop`
-contains the Electron shell, and `modules/`, `tests/e2e/` and `tests/contracts/` are empty (the last two
-hold `.gitkeep`).
+The tree is the target shape. Today `src/mavrykx` contains the layer packages, the empty
+`src/mavrykx/modules/` package and stubs, and `apps/desktop` contains the Electron shell.
+`tests/e2e/` and `tests/contracts/` do not exist yet.
 
 ```text
 mavrykx/
@@ -118,8 +118,8 @@ mavrykx/
 │   ├── agents/               # tracker and domain-doc consumer rules
 │   └── implementation/       # working plans (not design authority; status per document)
 ├── src/mavrykx/
-│   ├── domain/               # pure Python: entities, values, policies
-│   ├── application/          # use cases, transactions, authorisation, audit
+│   ├── domain/               # shared kernel: primitives and policies
+│   ├── application/          # operation registry, transactions, authorisation, audit
 │   ├── infrastructure/       # PostgreSQL, blobs, browser, editor, providers
 │   ├── interfaces/
 │   │   ├── api/              # FastAPI routes
@@ -128,15 +128,16 @@ mavrykx/
 │   ├── gateway/              # the one ToolGateway
 │   ├── agent/                # Pydantic AI loop and run context
 │   ├── composition/          # AgentComposition, bundle selection
+│   ├── modules/              # one package per owning module
+│   │   └── <module>/
+│   │       ├── api.py        # public contracts
+│   │       ├── contracts.py  # public DTOs
+│   │       ├── service.py    # public use cases
+│   │       ├── domain.py     # entities this module owns
+│   │       ├── models.py     # private
+│   │       ├── repository.py # private
+│   │       └── internal/     # private
 │   └── root/                 # the only construction site
-├── modules/                  # one package per owning module
-│   └── <module>/
-│       ├── api.py            # public contracts
-│       ├── contracts.py      # DTOs
-│       ├── service.py        # use cases
-│       ├── models.py         # private
-│       ├── repository.py     # private
-│       └── internal/         # private
 ├── apps/desktop/
 │   ├── src/main/             # Electron main
 │   ├── src/preload/          # contextBridge surface
@@ -149,8 +150,13 @@ mavrykx/
 │   ├── negative/             # fixtures that must fail a check
 │   └── contracts/            # generated-contract drift
 ├── migrations/               # Alembic revisions; 0001 executes the baseline SQL
-└── vendor/euro-office/       # fetch pins, never binaries in git
+└── vendor/euro-office/       # third-party source; binaries are pinned, never committed
 ```
+
+Owning modules live inside the package, so they ship in the wheel: `uv_build` needs no extra
+settings and there is one import root. `vendor/` holds third-party source that MavrykX adapts, never
+product code. Euro-Office binaries are fetched, not committed; the pinned `vendor.lock.json` and the
+fetch-and-verify script are planned, and the reduced tree lands outside version control.
 
 ---
 
@@ -159,6 +165,9 @@ mavrykx/
 - **Domain**: entities, value objects, invariants, policies. Pure Python, plain classes and
   dataclasses; Pydantic models belong at the boundaries, not in the domain. No FastAPI, SQLAlchemy,
   Pydantic AI, Electron, filesystem or network.
+- **Owning modules**: one package per table owner under `src/mavrykx/modules/<module>/`. A module owns
+  its entities in `domain.py`; `mavrykx.domain` keeps only primitives and policies used by two or
+  more modules.
 - **Application services**: use cases, transactions, authorisation, audit. Own the operation.
 - **Infrastructure**: PostgreSQL repositories, blobs, browser, editor, model providers, court
   adapters. No business authority.
@@ -172,8 +181,10 @@ mavrykx/
 Documents have four distinct jobs: Euro-Office renders DOCX and PDF; `x2t` converts; the builder
 writes; `lxml` reads the OOXML package for verification. The editor API is not a server-side parser.
 
-Public per module: `api.py`, `contracts.py`, `service.py`. Everything else is private. The
-table-ownership manifest is `ops.table_owner` in the baseline; `tools/ownership.py` checks it.
+Public per module: `api.py`, `contracts.py`, `service.py`. Private: `domain.py`, `models.py`,
+`repository.py`, `mappers.py`, `internal/` and tests. A module imports another module through `api`,
+`contracts` or `service` only. The table-ownership manifest is `ops.table_owner` in the baseline;
+`tools/ownership.py` checks it.
 
 ### Design check
 

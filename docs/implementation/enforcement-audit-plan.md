@@ -55,7 +55,9 @@ the present checks are the subset above.
 - The workspace rules D5, D6 and E9–E13 have no product module yet; they are wired with the CRM.
 - `tools/court_leak.py`, `tools/contracts_drift.py`, `tools/docs_agree.py`, the no-god-file check and
   Electron E2E are not implemented.
-- `modules/` has no import-linter contract yet; add it with the first module.
+- The module independence rule B1f has a negative fixture but no live contract: `import-linter` needs
+  an explicit module list, so it is declared with the first module. Add each module to `modules` in
+  `.importlinter` and keep `ignore_imports` to the public `api`, `contracts` and `service`.
 - The type framework has boundary DTOs only; `MatterId`, `RevisionToken`, `SectionId` and the workspace
   DTOs arrive with the first CRM module.
 - The baseline `ops.table_owner` manifest covers the added `user_credential`, `delegation` and
@@ -129,11 +131,11 @@ and assert a failure that names the rule.
 
 | ID | Problem | Applies to | Enforced by | Correct alternative | Proof |
 |---|---|---|---|---|---|
-| B1 | Domain imports infrastructure | `domain/`, `modules/*/domain` | import-linter layers | Define a port; implement it outside | Fixture importing SQLAlchemy fails |
+| B1 | Domain imports infrastructure | `src/mavrykx/domain/`, `src/mavrykx/modules/*/domain` | import-linter layers | Define a port; implement it outside | Fixture importing SQLAlchemy fails |
 | B2 | Interface computes a decision | `interfaces/` | import-linter independence + operation parity | Put it in the service | Fixture with a branch in a route fails |
 | B3 | Operation implemented twice | CLI, HTTP, tools | `tools/operations.py` parity | One registry entry, three adapters | Route with no registry entry fails |
 | B4 | Renderer reaches Node or DB | `apps/desktop/src/renderer` | dependency-cruiser + preload allowlist | Add a preload method | Fixture importing `node:fs` fails |
-| B5 | Module writes another’s table | `modules/` | ownership manifest + SQL grants | Call the owner’s service/port | Fixture with a foreign `INSERT` fails |
+| B5 | Module writes another’s table | `src/mavrykx/modules/` | ownership manifest + SQL grants | Call the owner’s service/port | Fixture with a foreign `INSERT` fails |
 | B6 | Cycle or god file | Whole repo | import-linter; dependency-cruiser; size check | Split at a seam | Fixture with a cycle fails |
 | B7 | Court-specific branch in core | `domain/`, `application/` | `tools/court_leak.py` | Adapter data in `forum_adapters` | Fixture naming a court fails |
 | B8 | Two owners for one table | Schema | `tools/ownership.py` | One owner per table | Manifest with two owners fails |

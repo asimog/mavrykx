@@ -4,12 +4,12 @@ MavrykX is a self-hosted legal-work platform for one firm; Maverick is its one a
 
 - `src/mavrykx/` — Python server.
 - `apps/desktop/` — Electron and React.
-- `modules/` — owning modules.
+- `src/mavrykx/modules/` — owning modules.
 - `docs/` — design, plans, rules.
 - `tools/` — checks.
 - `tests/` — unit, integration and negative fixtures.
 - `migrations/` — Alembic baseline.
-- `vendor/euro-office/` — queue adapter.
+- `vendor/euro-office/` — third-party adapter source; never product code.
 - `.reference/` — local only; read only when asked.
 
 ## Commands
