@@ -2,8 +2,8 @@
 
 **This repository holds the V1 design and the first implementation work for MavrykX** — a self-hosted
 legal-work platform whose one agent is **Maverick**. The design set is `docs/v1/`; implementation
-plans are `docs/implementation/`; the first code is the Euro-Office PostgreSQL adapter under
-`vendor/euro-office/`. The scaffold and its verification spine exist; there is no product module yet.
+plans are `docs/implementation/`; the scaffold, operation registry and Euro-Office PostgreSQL adapter
+under `vendor/euro-office/` are the working code. There is no product module yet.
 
 The design is not a claim that the product exists.
 
@@ -12,7 +12,7 @@ The design is not a claim that the product exists.
 - [`docs/v1/01-architecture.md`](docs/v1/01-architecture.md) — system shape, modules, stack, dependency enforcement, deployment, build order, acceptance.
 - [`docs/v1/02-domain-model.md`](docs/v1/02-domain-model.md) — definitions, entities, relationships, lifecycles, invariants, matter-intelligence plan.
 - [`docs/v1/03-application-agent-and-data.md`](docs/v1/03-application-agent-and-data.md) — application services, gateway, Pydantic AI/Harness, workflows, CLI, data, documents, security, audit.
-- [`docs/v1/04-shared-workspaces-and-collaboration.md`](docs/v1/04-shared-workspaces-and-collaboration.md) — Matter workspace, conversations, access, live editing, distributed execution, submissions.
+- [`docs/v1/04-shared-workspaces-and-collaboration.md`](docs/v1/04-shared-workspaces-and-collaboration.md) — Matter workspace, roles, sequential editing, access, review, distributed execution.
 - [`docs/v1/05-product-experience.md`](docs/v1/05-product-experience.md) — navigation, Today, Matter workspace, classification setup, documents, browser, Research Studio, library, workflows, inbox, onboarding.
 - [`docs/v1/schema/0001_core.sql`](docs/v1/schema/0001_core.sql) and [`0002_rls_test.sql`](docs/v1/schema/0002_rls_test.sql) — the SQL appendix.
 - [`docs/implementation/repo-scaffold.md`](docs/implementation/repo-scaffold.md) — repository shape, pins, verification command.

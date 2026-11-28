@@ -6,7 +6,7 @@ Two external repositories were studied for the CRM and shared-workspace design. 
 
 The clones live outside the source tree at `C:/dev/reference/`. The pins, licences and test results are recorded here and in [`manifest.json`](manifest.json). The licence texts are in [`licenses/`](licenses/).
 
-The clones are intentionally not committed: the working trees are roughly 48 MB (Kosmos) and 979 MB (Stella), and a submodule would make the product checkout depend on two upstream repositories. This file, the manifest and the licence texts are the committed reference record; the clones are the archive.
+The clones are intentionally not committed: the clone directories total about 56 MB (Kosmos) and 938 MB (Stella) including git metadata, and a submodule would make the product checkout depend on two upstream repositories. This file, the manifest and the licence texts are the committed reference record; the clones are the archive.
 
 | Reference | Pin | Release | Licence | Stack |
 |---|---|---|---|---|
@@ -40,7 +40,7 @@ Kosmos is a working Django practice manager. It is useful as a **CRM behaviour r
 
 ### Tests actually run
 
-Kosmos was run in a temporary virtual environment outside the clone (`UV_PROJECT_ENVIRONMENT` under `%TEMP%`), not in the clone.
+Kosmos was run in a temporary virtual environment outside the clone (`UV_PROJECT_ENVIRONMENT` under `%TEMP%`), not in the clone. The clone has no `config/.env`; the run set dummy `SECRET_KEY`, `DEBUG`, `ENV`, `ALLOWED_HOSTS` and `DB_*` values. The database suite is the only part that uses the database.
 
 | Command | Result |
 |---|---|

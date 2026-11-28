@@ -1,9 +1,9 @@
 # MavrykX
 
 **Architecture and the verification spine.** MavrykX is the platform; **Maverick** is the one agent.
-The design set is `docs/v1/`; the scaffold and its checks exist; no product module does yet. The first
-code remains the Euro-Office PostgreSQL adapter under
-[`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md).
+The design set is `docs/v1/`; the scaffold, operation registry and checks exist; no product module
+does yet. The scaffold and the Euro-Office PostgreSQL adapter under
+[`vendor/euro-office/pg-adapter/`](vendor/euro-office/pg-adapter/README.md) are the working code.
 
 Start here: [docs/v1/01-architecture.md](docs/v1/01-architecture.md).
 

@@ -177,9 +177,9 @@ One firm per installation; a setup token; the first lawyer becomes admin.
 2. Set retention and policy. The model policy is configured but Maverick is not switched on in the CRM stage.
 3. Invite lawyers and staff; assign firm roles. A solo firm can skip this and add people later.
 4. Create the first client when there is one; open the first Matter with a note. Notes alone are enough.
-5. Add the Matter members, sections and first documents.
-6. Create tasks, assignments and events; use a conversation; submit the first piece of work for review and approve or return it.
-7. Import the first documents into the Matter sections. Run the first workflow, or ask Maverick with the Matter’s documents in scope, only after the CRM is working.
+5. Add the Matter members and sections.
+6. Create tasks, assignments and events; import the first documents into the sections; use a conversation; submit the first piece of work for review and approve or return it.
+7. Run the first workflow, or ask Maverick with the Matter’s documents in scope, only after the CRM is working.
 
 No product tour, no empty dashboard. The first screen is a Matter with a next step — even if the whole Matter is one note. The firm can run a real Matter through the CRM before the agent is enabled.
 

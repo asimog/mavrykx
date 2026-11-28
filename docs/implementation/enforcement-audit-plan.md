@@ -51,8 +51,8 @@ negative fixtures. The rule catalogue below remains the target for the first pro
 - The workspace rules D5, D6 and E9–E13 have no product module yet; they are wired with the CRM.
 - Table-ownership coverage must be extended as each module adds tables; the baseline manifest is not
   the final one.
-- The type framework exists for identities and states; `RevisionToken`, `SectionId` and the workspace
-  DTOs are added with the first CRM module.
+- The boundary-contract framework exists; the identity and state types (`MatterId`, `RevisionToken`,
+  `SectionId`) and the workspace DTOs are added with the first CRM module.
 - No product module exists yet. The first is firm, users, memberships and roles; the scaffold is not
   the product.
 
