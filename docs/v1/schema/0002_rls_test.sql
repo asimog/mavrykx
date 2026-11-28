@@ -9,8 +9,8 @@
 --     cycle-free (FD-15);
 --   * the audit chain links and carries the new actor/trigger/approval fields.
 -- Expected: probes 1-2 print 1; probe 3 raises an RLS error; probes 4-7 print 0;
--- probe 8 prints 2; probe 9 prints 1; probe 10 prints 1; probes 11-13 raise
--- errors; the audit check prints 3 and t.
+-- probe 8 prints 2; probe 9 prints 1; probe 10 prints 1; probes 11-13 and 15
+-- raise errors; probe 14 prints 1; the audit check prints 3 and t.
 
 \set ON_ERROR_STOP off
 
@@ -22,13 +22,17 @@ on conflict do nothing;
 insert into app.user (id, email, display_name) values
   ('00000000-0000-0000-0000-000000000011', 'a@test.local', 'User A'),
   ('00000000-0000-0000-0000-000000000012', 'b@test.local', 'User B'),
-  ('00000000-0000-0000-0000-000000000013', 'admin@test.local', 'Firm Admin')
+  ('00000000-0000-0000-0000-000000000013', 'admin@test.local', 'Firm Admin'),
+  ('00000000-0000-0000-0000-000000000014', 'c@test.local', 'User C'),
+  ('00000000-0000-0000-0000-000000000015', 'd@test.local', 'User D')
 on conflict do nothing;
 
 insert into app.membership (user_id, firm_id, role) values
   ('00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', 'lawyer'),
   ('00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000001', 'lawyer'),
-  ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000001', 'admin')
+  ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000001', 'admin'),
+  ('00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000001', 'lawyer'),
+  ('00000000-0000-0000-0000-000000000015', '00000000-0000-0000-0000-000000000001', 'lawyer')
 on conflict do nothing;
 
 insert into app.contact (id, firm_id, kind, display_name) values
@@ -48,7 +52,16 @@ on conflict do nothing;
 
 insert into app.matter_member (matter_id, user_id, access, granted_by) values
   ('00000000-0000-0000-0000-000000000041', '00000000-0000-0000-0000-000000000011', 'edit', '00000000-0000-0000-0000-000000000011'),
-  ('00000000-0000-0000-0000-000000000042', '00000000-0000-0000-0000-000000000012', 'edit', '00000000-0000-0000-0000-000000000012')
+  ('00000000-0000-0000-0000-000000000042', '00000000-0000-0000-0000-000000000012', 'edit', '00000000-0000-0000-0000-000000000012'),
+  ('00000000-0000-0000-0000-000000000041', '00000000-0000-0000-0000-000000000015', 'edit', '00000000-0000-0000-0000-000000000013')
+on conflict do nothing;
+
+insert into app.delegation (id, firm_id, delegator_user_id, delegate_user_id, scope) values
+  ('00000000-0000-0000-0000-0000000000a1',
+   '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000000013',
+   '00000000-0000-0000-0000-000000000015',
+   'access')
 on conflict do nothing;
 
 insert into app.document (id, matter_id, type_key, title, created_by, confidentiality) values
@@ -207,6 +220,29 @@ values ('00000000-0000-0000-0000-000000000099', '00000000-0000-0000-0000-0000000
 update app.proceeding_application
   set parent_application_id = '00000000-0000-0000-0000-000000000092'
   where id = '00000000-0000-0000-0000-000000000091';
+
+-- --- delegated access and view-vs-edit --------------------------------
+set role maverick_app;
+select set_config('app.user_id', '00000000-0000-0000-0000-000000000015', false);
+
+\echo 'probe 14: delegated access adds user C as view (expect 1)'
+with ins as (
+  insert into app.matter_member (matter_id, user_id, access, granted_by)
+  values ('00000000-0000-0000-0000-000000000041',
+          '00000000-0000-0000-0000-000000000014',
+          'view',
+          '00000000-0000-0000-0000-000000000015')
+  returning 1
+)
+select count(*) from ins;
+
+select set_config('app.user_id', '00000000-0000-0000-0000-000000000014', false);
+
+\echo 'probe 15: view member insert into note (expect RLS error)'
+insert into app.note (matter_id, author_id, body)
+values ('00000000-0000-0000-0000-000000000041',
+        '00000000-0000-0000-0000-000000000014',
+        'view intrusion');
 
 -- --- audit chain ----------------------------------------------------------
 reset role;

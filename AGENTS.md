@@ -82,7 +82,7 @@ application nests inside a Matter or proceeding and is never a sub-matter. Rejec
 | [`docs/v1/03-application-agent-and-data.md`](docs/v1/03-application-agent-and-data.md) | Application services; service contracts; the gateway; Pydantic AI and the Harness; workflows; CLI; data; documents; security; audit. | Adding a service, tool, workflow, CLI command or data path; before an agent capability. | Service boundaries, gateway rules, agent composition, data and audit rules. |
 | [`docs/v1/04-shared-workspaces-and-collaboration.md`](docs/v1/04-shared-workspaces-and-collaboration.md) | Matter workspace; firm roles and Matter access; the resource model; sequential editing; the edit lease and save contract; submission and review; distributed execution. | Changing access, document editing, collaboration or execution. | Access policy, edit lease, conflict handling, review flow. |
 | [`docs/v1/05-product-experience.md`](docs/v1/05-product-experience.md) | Navigation; Today; the Matter workspace; document view; the Maverick dock; review inbox; settings; onboarding. | Adding or changing a user-facing surface. | Product surfaces and interaction rules. |
-| [`docs/v1/schema/0001_core.sql`](docs/v1/schema/0001_core.sql) and [`0002_rls_test.sql`](docs/v1/schema/0002_rls_test.sql) | Baseline DDL and RLS probes. The domain model is the source; SQL must match it. | Before any schema or migration work. | Table shapes, RLS policies, the executable `ops.table_owner` copy of the domain owner map. Do not edit `0001_core.sql`; add a forward-only revision. The `0001` digest stays fixed. |
+| [`docs/v1/schema/0001_core.sql`](docs/v1/schema/0001_core.sql) and [`0002_rls_test.sql`](docs/v1/schema/0002_rls_test.sql) | Baseline DDL and RLS probes. The domain model is the source; SQL must match it. | Before any schema or migration work. | Table shapes, RLS policies, the executable `ops.table_owner` copy of the domain owner map. The baseline is mutable: edit it only with the schema, code and tests together, update `migrations/baseline.py` and the RLS fixtures, and run `--full`. Use a revision only when data must be preserved. |
 | [`docs/implementation/repo-scaffold.md`](docs/implementation/repo-scaffold.md) | Repository layout; exact pins; lockfile rules; verification commands. | Adding a dependency, changing a pin, or running a check. | Pins, layout, command surface. |
 | [`docs/implementation/enforcement-audit-plan.md`](docs/implementation/enforcement-audit-plan.md) | Rule catalogue; checks; negative tests; enforcement status. | Adding a rule or claiming a boundary is enforced. | Rule IDs, proofs, current coverage. |
 | [`docs/implementation/eurooffice-integration-plan.md`](docs/implementation/eurooffice-integration-plan.md) | Euro-Office local editor integration; sequential editing; deferred shared-session topology; packaging decisions. | Editor, `x2t`, lease or shared-session work. | Editor integration and deferred topology. |
@@ -119,10 +119,11 @@ for decisions and mermaid for diagrams.
 - Euro-Office **9.3.8** only. V1 runs the embedded local editor and `x2t`; the target installer carries
   the server pack but V1 does not start it. Do not mix `web-apps`, `sdkjs` or `x2t` from different
   releases.
-- Migrations are forward-only. Revision `0001` executes `docs/v1/schema/0001_core.sql`; later revisions
-  are numbered; `downgrade` is not implemented. Do not edit the baseline SQL: `0001` and its digest stay
-  fixed, and a new revision is applied after it. `alembic check` is the intended model-drift gate once
-  SQLAlchemy models exist; today `tools/schema.py` checks the baseline digest, migration head and RLS.
+- Migrations: revision `0001` executes `docs/v1/schema/0001_core.sql`. The baseline is mutable when the
+  schema, code and tests change together; update `migrations/baseline.py` and the RLS fixtures and run
+  `--full`. Use a numbered forward-only revision when data must be preserved; `downgrade` is not
+  implemented. `alembic check` is the intended model-drift gate once SQLAlchemy models exist; today
+  `tools/schema.py` checks the baseline digest, migration head and RLS.
 - Exact pins and the pairs that move together are in
   [`docs/implementation/repo-scaffold.md`](docs/implementation/repo-scaffold.md) §1. The lockfiles are
   the evidence; a prose pin that disagrees with a lockfile is a defect.
@@ -140,21 +141,20 @@ uv run python -m tools.verify --rule E8
 `docs/implementation/repo-scaffold.md` §4 owns the command surface; this section is the operating summary.
 
 `--fast` runs the Markdown policy, comment policy, mypy, TypeScript, ruff, ESLint, import-linter,
-dependency-cruiser and operation-parity checks. `--full` adds pytest, the negative fixtures, `pip-audit`
-and `npm audit`, `uv lock --check`, and the baseline/RLS schema check. It requires a disposable
-PostgreSQL 17.12 + pgvector database, `MAVRYKX_DATABASE_URL`, `psql` on `PATH`, and
+dependency-cruiser, operation-parity and table-ownership checks. `--full` adds pytest, the negative
+fixtures, `pip-audit` and `npm audit`, `uv lock --check`, and the baseline/RLS schema check. It requires a
+disposable PostgreSQL 17.12 + pgvector database, `MAVRYKX_DATABASE_URL`, `psql` on `PATH`, and
 `uv run alembic upgrade head`. Without `psql`, the RLS probe test skips. The integration test drops and
 recreates the `app`, `audit`, `ref` and `ops` schemas.
 
-CI runs `--full` on every pull request and on pushes to `main`, against
-`pgvector/pgvector:pg17` (PostgreSQL 17.12 confirmed). The `verify` check is required on `main`. E2E,
-contract-drift, table-ownership, court-leak and docs-agree checks are **not wired yet**; do not claim
-they ran. The adapter's own `node test/smoke.js` proves the queue and is not part of `tools.verify`.
+CI is not used for this local setup. Run `--full` locally. If CI is re-enabled, it runs `--full` on
+`pgvector/pgvector:pg17` (PostgreSQL 17.12) and the `verify` check is required on `main`. E2E,
+contract-drift, court-leak and docs-agree checks are **not wired yet**; do not claim they ran.
 
 Required coverage for a change:
 
-- **Schema or migration:** a new forward-only revision; `alembic upgrade head`; the RLS probes; a
-  table owner in `ops.table_owner`; `--full`.
+- **Schema or migration:** a baseline edit with `migrations/baseline.py` and the RLS fixtures updated, or
+  a forward-only revision when data must be preserved; `alembic upgrade head`; `--full`.
 - **Permissions:** negative fixtures for a non-member, the firm admin, a restricted document, a
   cross-Matter read or write, and a revoked grant. The service check and the RLS check share the same
   fixture.

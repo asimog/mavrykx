@@ -81,10 +81,12 @@ def test_rls_probes_on_a_disposable_database() -> None:
     assert _section(probes.stdout, "probe 4") == ["0"]
     assert _section(probes.stdout, "probe 5") == ["0"]
     assert _section(probes.stdout, "probe 6") == ["0"]
+    assert _section(probes.stdout, "probe 14") == ["1"]
     assert _section(probes.stdout, "audit") == ["3|t", "t"]
 
     assert 'row-level security policy for table "document"' in probes.stderr
+    assert 'row-level security policy for table "note"' in probes.stderr
     assert "application parent not found" in probes.stderr
     assert "application nesting deeper than 6" in probes.stderr
     assert "application matter and parent are immutable" in probes.stderr
-    assert probes.stderr.count("ERROR:") == 4
+    assert probes.stderr.count("ERROR:") == 5

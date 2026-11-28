@@ -89,7 +89,7 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 | Resource | Create | Edit | Submit and review | Delete or archive |
 |---|---|---|---|---|
 | Section | Firm admin or Matter `edit` | Rename, reorder, move; firm admin or Matter `edit` | None | Only when empty of documents and child sections; audited |
-| Document | Firm admin or Matter `edit` with document edit access | Acquire the edit lease; save a new version | Submit the current version; a firm admin or lawyer with Matter `edit` reviews | Archive; hard delete needs approval and no legal hold |
+| Document | Firm admin or Matter `edit` with document edit access | Acquire the edit lease; save a new version | Submit the current version; a firm admin or lawyer with Matter `edit` reviews | Archive; a document with versions is not hard-deleted |
 | Note | Firm admin or Matter `edit` | Firm admin, author or Matter `edit`; every edit audited | None unless attached to a submitted version | Firm admin or author; audited; blocked by a legal hold |
 | Task / assignment | Firm admin or Matter `edit` | Assignee updates status and comments; only the assignor or a Matter `edit` member changes the due date | Completion reviewed where the task says so | Cancel; hard delete is exceptional and audited |
 | Appointment / deadline / hearing | Firm admin or Matter `edit` | Creator or Matter `edit` | None | Cancel or delete; audited |
@@ -103,6 +103,7 @@ Every resource carries one `matter_id` and one owning module. A section arranges
 - A new version or revision never overwrites an older one.
 - The assignor or a Matter `edit` member owns the due date; an assignee cannot silently extend a deadline.
 - A delete is a human act. An agent may propose one; it cannot execute it.
+- A Matter, a document with versions and an application are archived, not hard-deleted.
 - No hard delete while a legal hold exists.
 - A section never becomes a permission boundary.
 - A delegate may perform a firm-admin duty only within the delegation scope and their own access; the

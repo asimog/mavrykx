@@ -25,7 +25,7 @@ lockfile is a target pin, not an installed dependency.
 | API | `fastapi` | `0.165.0` | |
 | DB | `sqlalchemy[asyncio]` | `2.1.9` | async ORM and migrations |
 | DB driver | `asyncpg` | `0.32.0` | |
-| Migrations | `alembic` | `1.20.1` | baseline `0001_core.sql`; forward-only |
+| Migrations | `alembic` | `1.20.1` | baseline `0001_core.sql`; mutable with schema/code/tests; forward-only when data-preserving |
 | Execution engine | `dbos` | `3.7.0` | optional behind `ExecutionEngine`; not installed |
 | CLI | `typer` | `0.29.3` | |
 | UI protocol | `ag-ui-protocol` | `1.0.0` | |
@@ -173,8 +173,7 @@ Documents have four distinct jobs: Euro-Office renders DOCX and PDF; `x2t` conve
 writes; `lxml` reads the OOXML package for verification. The editor API is not a server-side parser.
 
 Public per module: `api.py`, `contracts.py`, `service.py`. Everything else is private. The
-table-ownership manifest is `ops.table_owner` in the baseline; `tools/ownership.py` is the planned
-check.
+table-ownership manifest is `ops.table_owner` in the baseline; `tools/ownership.py` checks it.
 
 ### Design check
 
@@ -206,10 +205,10 @@ uv run python -m tools.verify --rule E8  # one rule and its negative fixture
 ```
 
 `--fast` runs the Markdown policy, comment policy, mypy, TypeScript, ruff, ESLint, import-linter,
-dependency-cruiser and operation parity. `--full` adds pytest, the negative fixtures, `pip-audit` and
-`npm audit`, `uv lock --check`, and the baseline/RLS schema check. It requires a migrated disposable
-PostgreSQL 17.12 + pgvector database and `MAVRYKX_DATABASE_URL`. E2E, contract drift, table ownership,
-court leak and docs-agree are **not wired yet**.
+dependency-cruiser, operation parity and table ownership. `--full` adds pytest, the negative fixtures,
+`pip-audit` and `npm audit`, `uv lock --check`, and the baseline/RLS schema check. It requires a migrated
+disposable PostgreSQL 17.12 + pgvector database and `MAVRYKX_DATABASE_URL`. E2E, contract drift, court
+leak and docs-agree are **not wired yet**.
 
 `tools/` contains:
 
@@ -221,7 +220,7 @@ court leak and docs-agree are **not wired yet**.
 | `operations.py` | every operation has CLI, HTTP and tool surfaces, or a declared exception; no interface decisions | present |
 | `schema.py` | baseline digest, migration head and live RLS invariants | present |
 | `negative.py` | runs the fixtures that must fail | present |
-| `ownership.py` | every table has exactly one owner | planned |
+| `ownership.py` | every table has exactly one owner | present |
 | `court_leak.py` | court names only in adapter data | planned |
 | `contracts_drift.py` | generated contracts match their source | planned |
 | `docs_agree.py` | pinned table agrees with the lockfiles | planned |

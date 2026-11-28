@@ -135,9 +135,9 @@ as `ToolSearch`, `Thinking`, `WebSearch`, `MCP` and `LocalWorkspace` are not Har
 
 This is the canonical owner map for domain entities and tables. `ops.table_owner` in the baseline is the
 executable table manifest; the two must agree for every baseline table. If they disagree, fix the SQL.
-`issue`, `argument`, `argument_authority`, `editing_session_participant` and `delegation` are designed but
-not baseline tables; add them with their owning module. `treatment` is a column on `judgment_version`,
-not a separate table.
+`issue`, `argument`, `argument_authority` and `editing_session_participant` are designed but not baseline
+tables; add them with their owning module. `treatment` is a column on `judgment_version`, not a separate
+table.
 
 ### Identity and access
 
@@ -147,6 +147,7 @@ not a separate table.
 - `session` — server-side login session. Owner: identity.
 - `device` — registered desktop. Owner: identity.
 - `execution_node` — desktop, server worker or shared node. Owner: identity.
+- `user_credential` — password hash and TOTP secret; no app-role read. Owner: identity.
 - `matter_member` — Matter grant: `edit` or `view`. Owner: access.
 - `reuse_grant` — cross-Matter reuse. Owner: access.
 - `resource_grant` — grants a restricted document inside a Matter. Owner: access.
@@ -161,6 +162,7 @@ not a separate table.
 ### Matter and litigation
 
 - `matter` — the engagement. Owner: matter.
+- `matter_close` — close disposition for one Matter: what happened to open tasks, proceedings and reviews. Owner: matter.
 - `matter_relation` — Matter-to-Matter link. Owner: matter.
 - `note` — Matter-scoped note, readable by every Matter member. Owner: matter.
 - `proceeding` — one legal process. Owner: proceedings. Its classification/detail fields carry the impugned order, originating proceeding, jurisdiction basis, governing date and a composable `detail` JSONB. There is no proceeding-relation table and no connected-proceeding graph.
@@ -347,7 +349,7 @@ erDiagram
 
 **ProceedingApplication:** contemplated → filed → decided/withdrawn → archived. Archived leaves the active spine but remains queryable.
 
-**Document:** draft → in review → approved → filed → superseded/archived. A save under the edit lease creates an immutable version; approval requires an approval row whose subject hash equals the current version hash. A new version resets approval. Restoring an old version creates a new version and resets approval.
+**Document:** draft → in review → approved → filed → superseded/archived. A save under the edit lease creates an immutable version; approval requires an approval row whose subject hash equals the current version hash. A new version resets approval. Restoring an old version creates a new version and resets approval. A document with versions is archived, never hard-deleted.
 
 **Approval:** pending → approved/rejected/expired/stale. A subject change makes it stale.
 
@@ -383,7 +385,8 @@ them.
 - Cross-Matter reuse requires a `reuse_grant`.
 - A rule has a source, effective date and verifier; stale = `unconfirmed`.
 - A skill/bundle version hash matches its content.
-- No hard delete while a legal hold exists.
+- No hard delete while a legal hold exists. A Matter, a document with versions and an application are
+  archived, not hard-deleted.
 - A calendar is derived; no table owns a date twice.
 - A conversation has one Matter and one owner; a cross-Matter message is rejected.
 - A gated transition is refused while a gate is open or its snapshot is stale.
@@ -471,18 +474,18 @@ This is a later design task, not implementation. Run it in two stages.
 
 [`0001_core.sql`](schema/0001_core.sql) is the baseline DDL appendix. It is deliberately smaller than the model and is not the starting point. If the domain model and SQL conflict, fix the SQL. The RLS test is [`0002_rls_test.sql`](schema/0002_rls_test.sql).
 
-The baseline includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, citation/verification, proceeding application, document chunk, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task_document, notifications, jobs, editing session/proposal and execution node. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the schema appendix; any later change is a numbered migration.
+The baseline includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, citation/verification, proceeding application, document chunk, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task_document, notifications, jobs, editing session/proposal, execution node, user credential, delegation and matter close. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the working schema appendix; edit it with the schema, code and tests together.
 
 The CRM substrate is in the baseline: `firm`, `user`, `membership`, `contact`, `client`, `matter`, `matter_member` with `edit`/`view`, `note`, `task` with assignee and work kind, `appointment` with a required Matter, `folder`, `document` and `document_version`, `conversation`, `message`, `resource_grant` for restricted documents, `editing_session`, `approval` and the audit chain. A **section** is a `folder` row; there is no second container table.
 
 The baseline's RLS policies define the simplified Matter access model. The probes in `0002_rls_test.sql`
-cover it; the Python test and SQL expectations must be reconciled before step 1 (see the enforcement
-plan §3). A firm admin is a lawyer and reads every Matter. A non-member reads no Matter. A Matter member reads every
-Matter resource; there are no private notes, private tasks, private conversations or private traces.
-Restricted-document grants cover `document`, `document_version`, `document_text`, `document_anchor`,
-`annotation`, `document_relation` and `document_chunk` through `has_document_access`,
+cover it, including delegated access and the view-member write refusal. A firm admin is a lawyer and
+reads every Matter. A non-member reads no Matter. A Matter member reads every Matter resource; there are
+no private notes, private tasks, private conversations or private traces. Restricted-document grants
+cover `document`, `document_version`, `document_text`, `document_anchor`, `annotation`,
+`document_relation` and `document_chunk` through `has_document_access`,
 `has_document_version_access` and `has_document_relation_access`.
 
 The edit lease has `opening`, `active`, `closing`, `closed`, `failed`, `revoked` and `expired`, a save idempotency key on `document_version`, and takeover-request/approval fields. There is no checkpoint and no `editor_recovery` source. The audit event has four actor types, trigger, run, initiating user, approval status and approver as columns.
 
-Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. They are not the live path; `source`, `legal_instrument*`, `provision`, `judgment*`, `format_rule` and `workflow_*` are. Do not add a new reader. The final citation target is the polymorphic cited-source model in §1 and §5. The baseline still points `citation` at `authority`/`authority_version`; a forward-only migration must add the explicit target columns, backfill, and switch the foreign key before the citation feature ships. Dropping a legacy table requires a forward-only migration and approval.
+Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. They are not the live path; `source`, `legal_instrument*`, `provision`, `judgment*`, `format_rule` and `workflow_*` are. Do not add a new reader. `citation` now carries the explicit cited-source columns and the one-target check; `authority` is legacy and nullable. The remaining live-to-legacy edges (`research_result`, `format_rule`, `agent_run.step_run_id`) are cut when their modules ship. Dropping a legacy table requires a baseline edit or a forward-only revision.

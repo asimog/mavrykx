@@ -103,10 +103,10 @@ flowchart TB
 
 ### Matter management — the Clio-shaped substrate
 
-- `identity` — firm, user, membership, session, device, execution node, delegation.
+- `identity` — firm, user, user credential, membership, session, device, execution node, delegation.
 - `access` — matter membership, reuse grant, restricted-document resource grant, the one Matter access policy.
 - `contacts` — contact, client.
-- `matter` — matter, parties, relations, notes.
+- `matter` — matter, close disposition, parties, relations, notes.
 - `work` — tasks, assignments, task-document links, deadlines, appointments.
 - `documents` — sections/folders, document identity, versions, anchors, annotations, edit leases, proposals, compare and restore.
 - `storage` — content-addressed blobs.
@@ -181,7 +181,8 @@ evidence. This section records the architecture-level choices; it does not repea
 - `ruff`, `mypy --strict`, `import-linter`, ESLint, `tsc`, `dependency-cruiser`, `pytest`, `hypothesis`,
   `pip-audit` and `npm audit` are the quality tools.
 - `alembic check` is the intended model-drift gate once SQLAlchemy models exist. Today
-  `tools/schema.py` checks the baseline digest, migration head and RLS. `downgrade` is not implemented.
+  `tools/schema.py` checks the baseline digest, migration head and RLS. The baseline is mutable while
+  schema, code and tests change together; use a numbered revision when data must be preserved.
 
 ---
 
@@ -263,8 +264,8 @@ The enforcement plan owns the rule catalogue and records which checks are wired.
 
 - Target packaging: a signed Windows installer for the desktop and a signed Windows/Linux server installer. No Docker dependency; a development machine may use a disposable PostgreSQL container for tests, never the product.
 - Bundled PostgreSQL, localhost-only; clients talk to the API, never the database.
-- No data migration from a prior product. The baseline is the first schema; later changes are
-  forward-only numbered migrations before pilot data.
+- No data migration from a prior product. The baseline is the working schema and may be edited when
+  schema, code and tests change together; use a forward-only numbered revision when data must be preserved.
 - Blobs content-addressed; backup manifest pins DB snapshot, blobs and audit head.
 - Encrypted backups; dry-run restore; quarterly drill.
 - Remote connection service: rendezvous + E2E relay; the firm server still authenticates and authorises.
@@ -330,11 +331,11 @@ invariants are in [02-domain-model.md](02-domain-model.md) §5.
 - Import layers and renderer isolation fail a broken fixture now. Table-ownership and no-god-file checks
   are required before step 1; their negative fixtures do not exist yet.
 
-**Schema smoke test.** The baseline is `0001_core.sql` with `0002_rls_test.sql`. CI has run the baseline
-on `pgvector/pgvector:pg17` (PostgreSQL 17.12) and the previous revision passed. Re-run it for the
-current revision before step 1. The baseline has 95 `app` tables, 0 without RLS, and 0 `matter_id` tables
-without a policy. pgvector 0.8.7 is the product target; the CI image tag does not assert that patch. The
-workspace step adds no table for a section; it uses `folder`.
+**Schema smoke test.** The baseline is `0001_core.sql` with `0002_rls_test.sql`. The full local suite
+passes on `pgvector/pgvector:pg17` (PostgreSQL 17.12), including the RLS probes, delegated access and the
+view-member write refusal. The baseline has 98 `app` tables, 0 without RLS, and 0 `matter_id` tables
+without a policy. pgvector 0.8.7 is the product target; the local image tag does not assert that patch.
+The workspace step adds no table for a section; it uses `folder`.
 
 ---
 

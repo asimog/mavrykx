@@ -32,7 +32,7 @@ The lockfile is the evidence. A prose pin that disagrees with the lock is a defe
 | `docs/v1/` as the five-document design set | **Keep** | One owner per truth |
 | `AGENTS.md` laws | **Keep**, as rationale | Not enforcement; points at checks |
 | SQL appendix + RLS negative test | **Keep and extend** | CI migrates and runs the probes |
-| Table-ownership rule | **Extend** | The `ops.table_owner` manifest exists; `tools/ownership.py` is planned |
+| Table-ownership rule | **Keep** | `ops.table_owner` plus `tools/ownership.py` in `--fast` |
 | Layering rules in `01` §6 | **Extend** | Enforced today by import-linter and dependency-cruiser |
 | “Prose does not enforce” | **Replace with checks where wired** | The remaining rules are prose until their fixture exists |
 | Hand-written architecture review | **Keep** | Human judgement, not a gate |
@@ -41,8 +41,8 @@ There is no Spec Kit pipeline. The repository uses the Matt Pocock flow and GitH
 tickets and implementation; there is no `specs/` tree.
 
 Present today: `tools/markdown_policy.py`, `tools/comments.py`, `tools/operations.py`,
-`tools/schema.py`, `tools/negative.py`, import-linter, dependency-cruiser, ruff, mypy, ESLint and tsc.
-Planned: `tools/ownership.py`, `tools/court_leak.py`, `tools/contracts_drift.py`,
+`tools/ownership.py`, `tools/schema.py`, `tools/negative.py`, import-linter, dependency-cruiser, ruff,
+mypy, ESLint and tsc. Planned: `tools/court_leak.py`, `tools/contracts_drift.py`,
 `tools/docs_agree.py`, the no-god-file check and Electron E2E. The rule catalogue below is the target;
 the present checks are the subset above.
 
@@ -53,21 +53,20 @@ the present checks are the subset above.
 - No product module exists yet. The first is firm, users, memberships and roles; the scaffold is not the
   product.
 - The workspace rules D5, D6 and E9–E13 have no product module yet; they are wired with the CRM.
-- `tools/ownership.py`, `tools/court_leak.py`, `tools/contracts_drift.py`, `tools/docs_agree.py`, the
-  no-god-file check and Electron E2E are not implemented.
+- `tools/court_leak.py`, `tools/contracts_drift.py`, `tools/docs_agree.py`, the no-god-file check and
+  Electron E2E are not implemented.
 - `modules/` has no import-linter contract yet; add it with the first module.
 - The type framework has boundary DTOs only; `MatterId`, `RevisionToken`, `SectionId` and the workspace
   DTOs arrive with the first CRM module.
-- The baseline `ops.table_owner` manifest covers 95 `app` tables plus `audit.audit_event`; extend it with
-  every new table. The check is not wired.
-- The current revision changes the baseline and the RLS test but not `tests/integration/test_schema.py`:
-  the test still asserts probe 6 = 1 and audit `2|t`, while `0002_rls_test.sql` expects probe 6 = 0 and
-  audit 3. The Python test and the SQL script disagree; reconcile them and re-run CI.
-- The citation target is polymorphic (judgment version, instrument version/provision, document
-  version/anchor or external source). The baseline still points `citation` at `authority`; add the
-  explicit target columns and `judgment.neutral_citation` in a forward-only revision before the citation
-  feature ships.
-- Admin delegation has no `delegation` table or audit columns yet. Add them with identity/access.
+- The baseline `ops.table_owner` manifest covers the added `user_credential`, `delegation` and
+  `matter_close` tables plus the existing schema. `tools/ownership.py` checks it in `--fast`.
+- RLS is level-aware: Matter `edit` and `view` are separate policies, and the RLS test now covers a
+  delegated access grant and a view-member write refusal. The full local suite passes.
+- The citation target is implemented in the baseline: explicit judgment, instrument/provision, cited
+  document and external-source columns with a one-target check; `judgment.neutral_citation` exists.
+  `authority` remains legacy.
+- Admin delegation has a `delegation` table and access helpers. Explicit delegator/delegation columns on
+  audit and approval are still missing; add them when the service writes delegated acts.
 - Session revocation is mark-only (`revoked_at`); a retention/purge job is later work.
 
 ---
@@ -286,7 +285,7 @@ No shared `Entity` interface. Each module owns its DTOs and its invariants.
 
 | Stage | Command | Budget | Contents |
 |---|---|---|---|
-| Fast (edit loop) | `python -m tools.verify --fast` | < 30 s | Markdown policy, comment policy, ruff, mypy, ESLint, tsc, import-linter, dependency-cruiser, operation parity |
+| Fast (edit loop) | `python -m tools.verify --fast` | < 30 s | Markdown policy, comment policy, ruff, mypy, ESLint, tsc, import-linter, dependency-cruiser, operation parity, table ownership |
 | Full (PR) | `python -m tools.verify --full` | < 10 min | Fast + pytest, negative fixtures, `pip-audit` + `npm audit`, `uv lock --check`, baseline/RLS schema check |
 | Release | `--release` | — | Not implemented; packaging and release checks arrive with the installer |
 

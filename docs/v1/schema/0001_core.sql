@@ -7,7 +7,7 @@
 --
 -- Conventions:
 --   * UUID keys, timestamptz, text + CHECK for stable sets.
---   * Every legal table carries matter_id and has RLS.
+--   * Every Matter-bound legal table carries matter_id and has RLS.
 --   * Immutable tables reject UPDATE and DELETE.
 --   * Derived data (text, anchors, chunks) is separate and rebuildable.
 
@@ -2147,7 +2147,9 @@ grant execute on all functions in schema app to maverick_app;
 grant execute on function audit.append(text,uuid,text,text,uuid,uuid,text,jsonb,text,text,uuid,uuid,text,uuid) to maverick_app;
 
 -- Legal-hold and deletion tables are deliberately absent here; they follow
--- the same matter_id + RLS pattern. See 04-data-and-storage.md §10.
+-- the same matter_id + RLS pattern. See docs/v1/03-application-agent-and-data.md
+-- §9 (retention and legal hold) and docs/v1/04-shared-workspaces-and-collaboration.md
+-- §4-§5 (deletion and legal hold).
 
 -- ---------------------------------------------------------------------------
 -- Table ownership manifest (one writer per table)
@@ -2198,3 +2200,929 @@ insert into ops.table_owner (table_name, module) values
   ('egress_policy','policy'),
   ('audit_event','audit')
 on conflict (table_name) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- CRM schema amendments
+-- The baseline is mutable pre-pilot. These changes are part of the baseline;
+-- update the digest in migrations/baseline.py and the RLS probes with them.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Identity: credentials and delegation
+-- ---------------------------------------------------------------------------
+create table app.user_credential (
+  user_id       uuid primary key references app.user(id) on delete cascade,
+  password_hash text,
+  totp_secret   text,
+  updated_at    timestamptz not null default now()
+);
+
+alter table app.user drop column if exists password_hash;
+alter table app.user drop column if exists totp_secret;
+
+alter table app.user_credential enable row level security;
+revoke all on app.user_credential from maverick_app, maverick_readonly;
+grant select, insert, update, delete on app.user_credential to maverick_owner;
+
+create table app.delegation (
+  id                uuid primary key default gen_random_uuid(),
+  firm_id           uuid not null references app.firm(id) on delete cascade,
+  delegator_user_id uuid not null references app.user(id) on delete cascade,
+  delegate_user_id  uuid not null references app.user(id) on delete cascade,
+  scope             text not null check (scope in ('all','access','review','library','settings')),
+  starts_at         timestamptz not null default now(),
+  ends_at           timestamptz,
+  revoked_at        timestamptz,
+  created_at        timestamptz not null default now(),
+  check (delegator_user_id <> delegate_user_id),
+  check (ends_at is null or ends_at > starts_at)
+);
+create unique index delegation_live
+  on app.delegation (firm_id, delegator_user_id, delegate_user_id, scope)
+  where revoked_at is null;
+
+alter table app.delegation enable row level security;
+alter table app.delegation force row level security;
+create policy delegation_admin on app.delegation for all
+  using (app.is_admin()) with check (app.is_admin());
+create policy delegation_read on app.delegation for select
+  using (delegator_user_id = app.current_user() or delegate_user_id = app.current_user());
+
+create table app.matter_close (
+  id          uuid primary key default gen_random_uuid(),
+  matter_id   uuid not null unique references app.matter(id) on delete cascade,
+  closed_by   uuid not null references app.user(id),
+  closed_at   timestamptz not null default now(),
+  reopened_at timestamptz,
+  disposition jsonb not null default '{}'::jsonb,
+  note        text
+);
+
+-- ---------------------------------------------------------------------------
+-- Citations and case-law identity
+-- ---------------------------------------------------------------------------
+alter table app.judgment add column if not exists neutral_citation text;
+create unique index if not exists judgment_neutral_citation
+  on app.judgment (neutral_citation) where neutral_citation is not null;
+
+alter table app.citation
+  alter column authority_id drop not null,
+  add column if not exists judgment_version_id uuid references app.judgment_version(id),
+  add column if not exists instrument_version_id uuid references app.instrument_version(id),
+  add column if not exists provision_id uuid references app.provision(id),
+  add column if not exists cited_document_version_id uuid references app.document_version(id),
+  add column if not exists source_id uuid references app.source(id),
+  add column if not exists target_kind text generated always as (
+    case
+      when judgment_version_id is not null then 'case_law'
+      when provision_id is not null then 'provision'
+      when instrument_version_id is not null then 'instrument'
+      when cited_document_version_id is not null then 'source_material'
+      when source_id is not null then 'external'
+      when authority_id is not null then 'legacy_authority'
+      else 'none'
+    end
+  ) stored;
+
+alter table app.citation
+  add constraint citation_one_target check (
+    num_nonnulls(
+      authority_id,
+      judgment_version_id,
+      instrument_version_id,
+      provision_id,
+      cited_document_version_id,
+      source_id
+    ) = 1
+  );
+alter table app.citation
+  add constraint citation_authority_version check (
+    authority_version_id is null or authority_id is not null
+  );
+
+-- ---------------------------------------------------------------------------
+-- Firm-level approvals and gates
+-- ---------------------------------------------------------------------------
+alter table app.approval
+  alter column matter_id drop not null,
+  add column if not exists firm_id uuid references app.firm(id);
+alter table app.approval
+  add constraint approval_scope check (matter_id is not null or firm_id is not null);
+
+alter table app.gate
+  alter column matter_id drop not null,
+  add column if not exists firm_id uuid references app.firm(id);
+alter table app.gate
+  add constraint gate_scope check (matter_id is not null or firm_id is not null);
+
+alter table app."order"
+  add constraint order_document_fk foreign key (document_id) references app.document(id);
+alter table app.approval
+  add constraint approval_requested_run_fk foreign key (requested_run_id) references app.agent_run(id);
+alter table app.document_version
+  add constraint document_version_created_run_fk foreign key (created_run_id) references app.agent_run(id);
+
+-- ---------------------------------------------------------------------------
+-- Grant and reference uniqueness
+-- ---------------------------------------------------------------------------
+do $$
+declare c record;
+begin
+  for c in
+    select conname
+    from pg_constraint
+    where conrelid = 'app.resource_grant'::regclass and contype = 'u'
+  loop
+    execute format('alter table app.resource_grant drop constraint %I', c.conname);
+  end loop;
+end $$;
+create unique index if not exists resource_grant_live
+  on app.resource_grant (resource_type, resource_id, subject_user_id)
+  where revoked_at is null;
+
+alter table app.library_grant add column if not exists revoked_at timestamptz;
+create unique index if not exists library_grant_live
+  on app.library_grant (
+    item_id,
+    coalesce(subject_user_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    coalesce(subject_role, '')
+  )
+  where revoked_at is null;
+
+create unique index if not exists forum_root_name
+  on app.forum (coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), name);
+
+-- ---------------------------------------------------------------------------
+-- Access helpers
+-- ---------------------------------------------------------------------------
+create or replace function app.is_member() returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.membership m
+    join app.user u on u.id = m.user_id
+    where m.user_id = app.current_user()
+      and m.disabled_at is null
+      and u.status = 'active'
+  )
+$$;
+
+create or replace function app.is_admin() returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.membership m
+    join app.user u on u.id = m.user_id
+    where m.user_id = app.current_user()
+      and m.role = 'admin'
+      and m.disabled_at is null
+      and u.status = 'active'
+  )
+$$;
+
+create or replace function app.has_matter_access(p_matter uuid, p_level text)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.is_admin() or exists (
+    select 1 from app.matter_member mm
+    where mm.matter_id = p_matter
+      and mm.revoked_at is null
+      and mm.user_id = app.current_user()
+      and (p_level = 'view' or mm.access = 'edit')
+  )
+$$;
+
+create or replace function app.has_matter_access(p_matter uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.has_matter_access(p_matter, 'view')
+$$;
+
+create or replace function app.has_document_access(p_document uuid, p_level text)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.document d
+    where d.id = p_document
+      and app.has_matter_access(d.matter_id, p_level)
+      and (
+        app.is_admin()
+        or d.confidentiality = 'matter'
+        or app.has_resource_grant('document', d.id, case when p_level = 'edit' then 'edit' else 'view' end)
+      )
+  )
+$$;
+
+create or replace function app.has_document_access(p_document uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.has_document_access(p_document, 'view')
+$$;
+
+create or replace function app.has_document_version_access(p_version uuid, p_level text)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.document_version dv
+    where dv.id = p_version
+      and app.has_document_access(dv.document_id, p_level)
+  )
+$$;
+
+create or replace function app.has_document_version_access(p_version uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.has_document_version_access(p_version, 'view')
+$$;
+
+create or replace function app.is_delegate(p_scope text)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select exists (
+    select 1 from app.delegation d
+    where d.delegate_user_id = app.current_user()
+      and d.revoked_at is null
+      and (d.ends_at is null or d.ends_at > now())
+      and (d.scope = 'all' or d.scope = p_scope)
+  )
+$$;
+
+create or replace function app.can_administer_matter(p_matter uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.is_admin()
+     or (app.is_delegate('access') and app.has_matter_access(p_matter, 'edit'))
+     or exists (
+       select 1 from app.matter m
+       where m.id = p_matter and m.responsible_user_id = app.current_user()
+     )
+$$;
+
+create or replace function app.can_approve(p_matter uuid)
+returns boolean
+language sql stable security definer
+set search_path = app, pg_temp as $$
+  select app.has_matter_access(p_matter, 'edit')
+     and (
+       app.is_admin()
+       or exists (
+         select 1 from app.membership m
+         where m.user_id = app.current_user()
+           and m.role = 'lawyer'
+           and m.disabled_at is null
+       )
+     )
+$$;
+
+create or replace function app.bump_revision() returns trigger
+language plpgsql as $$
+begin
+  new.revision := coalesce(old.revision, 0) + 1;
+  return new;
+end $$;
+
+revoke all on function app.is_member() from public;
+revoke all on function app.is_admin() from public;
+revoke all on function app.has_matter_access(uuid) from public;
+revoke all on function app.has_matter_access(uuid, text) from public;
+revoke all on function app.has_document_access(uuid) from public;
+revoke all on function app.has_document_access(uuid, text) from public;
+revoke all on function app.has_document_version_access(uuid) from public;
+revoke all on function app.has_document_version_access(uuid, text) from public;
+revoke all on function app.is_delegate(text) from public;
+revoke all on function app.can_administer_matter(uuid) from public;
+revoke all on function app.can_approve(uuid) from public;
+grant execute on function app.is_member() to maverick_app, maverick_readonly;
+grant execute on function app.is_admin() to maverick_app, maverick_readonly;
+grant execute on function app.has_matter_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_matter_access(uuid, text) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_access(uuid, text) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_version_access(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.has_document_version_access(uuid, text) to maverick_app, maverick_readonly;
+grant execute on function app.is_delegate(text) to maverick_app, maverick_readonly;
+grant execute on function app.can_administer_matter(uuid) to maverick_app, maverick_readonly;
+grant execute on function app.can_approve(uuid) to maverick_app, maverick_readonly;
+
+alter function app.is_member() owner to maverick_owner;
+alter function app.is_admin() owner to maverick_owner;
+alter function app.has_matter_access(uuid) owner to maverick_owner;
+alter function app.has_matter_access(uuid, text) owner to maverick_owner;
+alter function app.has_document_access(uuid) owner to maverick_owner;
+alter function app.has_document_access(uuid, text) owner to maverick_owner;
+alter function app.has_document_version_access(uuid) owner to maverick_owner;
+alter function app.has_document_version_access(uuid, text) owner to maverick_owner;
+alter function app.is_delegate(text) owner to maverick_owner;
+alter function app.can_administer_matter(uuid) owner to maverick_owner;
+alter function app.can_approve(uuid) owner to maverick_owner;
+alter function app.bump_revision() owner to maverick_owner;
+
+alter table app.matter_close enable row level security;
+alter table app.matter_close force row level security;
+create policy matter_close_read on app.matter_close for select
+  using (app.has_matter_access(matter_id, 'view'));
+create policy matter_close_write on app.matter_close for all
+  using (app.can_administer_matter(matter_id))
+  with check (app.can_administer_matter(matter_id));
+
+-- ---------------------------------------------------------------------------
+-- Level-aware Matter RLS
+-- ---------------------------------------------------------------------------
+do $$
+declare t record;
+begin
+  for t in
+    select c.table_name
+    from information_schema.columns c
+    where c.table_schema = 'app'
+      and c.column_name = 'matter_id'
+      and c.table_name <> 'matter_member'
+  loop
+    execute format('alter table app.%I enable row level security', t.table_name);
+    execute format('alter table app.%I force row level security', t.table_name);
+    execute format('drop policy if exists %I on app.%I', t.table_name || '_matter', t.table_name);
+    execute format('drop policy if exists %I on app.%I', t.table_name || '_read', t.table_name);
+    execute format('drop policy if exists %I on app.%I', t.table_name || '_write', t.table_name);
+    execute format(
+      'create policy %I on app.%I for select using (app.has_matter_access(matter_id, ''view''))',
+      t.table_name || '_read', t.table_name);
+    execute format(
+      'create policy %I on app.%I for all using (app.has_matter_access(matter_id, ''edit'')) with check (app.has_matter_access(matter_id, ''edit''))',
+      t.table_name || '_write', t.table_name);
+  end loop;
+end $$;
+
+-- matter: read by members, update by editors, insert/delete by admin
+drop policy if exists matter_access on app.matter;
+drop policy if exists matter_read on app.matter;
+drop policy if exists matter_update on app.matter;
+drop policy if exists matter_insert on app.matter;
+drop policy if exists matter_delete on app.matter;
+create policy matter_read on app.matter for select
+  using (app.has_matter_access(id, 'view'));
+create policy matter_update on app.matter for update
+  using (app.has_matter_access(id, 'edit'))
+  with check (app.has_matter_access(id, 'edit'));
+create policy matter_insert on app.matter for insert
+  with check (app.is_admin());
+create policy matter_delete on app.matter for delete
+  using (false);
+
+-- matter_member: read by members, write by admin/delegate/responsible lawyer
+drop policy if exists matter_member_self on app.matter_member;
+drop policy if exists matter_member_admin on app.matter_member;
+drop policy if exists matter_member_read on app.matter_member;
+drop policy if exists matter_member_write on app.matter_member;
+create policy matter_member_read on app.matter_member for select
+  using (app.has_matter_access(matter_id, 'view'));
+create policy matter_member_write on app.matter_member for all
+  using (app.can_administer_matter(matter_id))
+  with check (app.can_administer_matter(matter_id));
+
+-- resource grants: read by subject/admin/responsible lawyer; write by same
+drop policy if exists resource_grant_matter on app.resource_grant;
+drop policy if exists resource_grant_read on app.resource_grant;
+drop policy if exists resource_grant_write on app.resource_grant;
+create policy resource_grant_read on app.resource_grant for select
+  using (
+    app.is_admin()
+    or subject_user_id = app.current_user()
+    or app.can_administer_matter(matter_id)
+  );
+create policy resource_grant_write on app.resource_grant for all
+  using (app.can_administer_matter(matter_id))
+  with check (app.can_administer_matter(matter_id));
+
+-- document: read follows the document grant; write requires Matter edit
+drop policy if exists document_matter on app.document;
+drop policy if exists document_access on app.document;
+drop policy if exists document_read on app.document;
+drop policy if exists document_update on app.document;
+drop policy if exists document_insert on app.document;
+drop policy if exists document_delete on app.document;
+create policy document_read on app.document for select
+  using (app.has_document_access(id, 'view'));
+create policy document_update on app.document for update
+  using (app.has_document_access(id, 'edit'))
+  with check (app.has_document_access(id, 'edit'));
+create policy document_insert on app.document for insert
+  with check (
+    app.has_matter_access(matter_id, 'edit')
+    and (confidentiality = 'matter' or app.is_admin() or created_by = app.current_user())
+  );
+create policy document_delete on app.document for delete
+  using (false);
+alter table app.document no force row level security;
+
+-- document_version: read follows the document; editor_save requires the lease
+drop policy if exists document_version_matter on app.document_version;
+drop policy if exists document_version_access on app.document_version;
+drop policy if exists document_version_read on app.document_version;
+drop policy if exists document_version_insert on app.document_version;
+create policy document_version_read on app.document_version for select
+  using (app.has_document_access(document_id, 'view'));
+create policy document_version_insert on app.document_version for insert
+  with check (
+    app.has_document_access(document_id, 'edit')
+    and (
+      source <> 'editor_save'
+      or exists (
+        select 1 from app.editing_session s
+        where s.document_id = document_id
+          and s.opened_by = app.current_user()
+          and s.status in ('opening','active')
+      )
+    )
+  );
+
+-- editing session: read by document readers; write by document editors
+drop policy if exists editing_session_matter on app.editing_session;
+drop policy if exists editing_session_access on app.editing_session;
+drop policy if exists editing_session_read on app.editing_session;
+drop policy if exists editing_session_write on app.editing_session;
+create policy editing_session_read on app.editing_session for select
+  using (app.has_document_access(document_id, 'view'));
+create policy editing_session_write on app.editing_session for all
+  using (app.has_document_access(document_id, 'edit'))
+  with check (app.has_document_access(document_id, 'edit'));
+
+-- document proposals: read by document readers; write by document editors
+drop policy if exists document_proposal_matter on app.document_proposal;
+drop policy if exists document_proposal_access on app.document_proposal;
+drop policy if exists document_proposal_read on app.document_proposal;
+drop policy if exists document_proposal_write on app.document_proposal;
+create policy document_proposal_read on app.document_proposal for select
+  using (app.has_document_access(document_id, 'view'));
+create policy document_proposal_write on app.document_proposal for all
+  using (app.has_document_access(document_id, 'edit'))
+  with check (app.has_document_access(document_id, 'edit'));
+
+-- approvals and gates: write only by an eligible approver
+drop policy if exists approval_matter on app.approval;
+drop policy if exists approval_read on app.approval;
+drop policy if exists approval_write on app.approval;
+create policy approval_read on app.approval for select
+  using (
+    case when matter_id is null then app.is_admin()
+         else app.has_matter_access(matter_id, 'view') end
+  );
+create policy approval_write on app.approval for all
+  using (
+    case when matter_id is null then app.is_admin()
+         else app.can_approve(matter_id) end
+  )
+  with check (
+    case when matter_id is null then app.is_admin()
+         else app.can_approve(matter_id) end
+  );
+
+drop policy if exists gate_matter on app.gate;
+drop policy if exists gate_read on app.gate;
+drop policy if exists gate_write on app.gate;
+create policy gate_read on app.gate for select
+  using (
+    case when matter_id is null then app.is_admin()
+         else app.has_matter_access(matter_id, 'view') end
+  );
+create policy gate_write on app.gate for all
+  using (
+    case when matter_id is null then app.is_admin()
+         else app.can_approve(matter_id) end
+  )
+  with check (
+    case when matter_id is null then app.is_admin()
+         else app.can_approve(matter_id) end
+  );
+
+-- notification delivery: a recipient can read their own delivery
+drop policy if exists notification_delivery_matter on app.notification_delivery;
+drop policy if exists notification_delivery_read on app.notification_delivery;
+create policy notification_delivery_read on app.notification_delivery for select
+  using (
+    (matter_id is null and exists (
+      select 1 from app.notification n
+      where n.id = notification_id
+        and n.recipient_user_id = app.current_user()
+    ))
+    or (matter_id is not null and app.has_matter_access(matter_id, 'view'))
+  );
+
+-- blobs: include every live blob-bearing table
+drop policy if exists blob_read on app.blob;
+create policy blob_read on app.blob for select using (
+  exists (select 1 from app.document_version dv where dv.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.template t where t.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.rule_snapshot rs where rs.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.instrument_snapshot s where s.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.judgment_snapshot s where s.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.library_version lv where lv.blob_sha256 = app.blob.sha256)
+  or exists (select 1 from app.retrieval_packet rp where rp.blob_sha256 = app.blob.sha256)
+);
+
+-- library grants: admin or delegated librarian writes
+drop policy if exists library_grant_admin on app.library_grant;
+drop policy if exists library_grant_write on app.library_grant;
+create policy library_grant_write on app.library_grant for all
+  using (app.is_admin() or app.is_delegate('library'))
+  with check (app.is_admin() or app.is_delegate('library'));
+
+-- ---------------------------------------------------------------------------
+-- Revision tokens
+-- ---------------------------------------------------------------------------
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'matter','folder','document','note','task','deadline','appointment',
+    'conversation','classification','research_project','research_plan',
+    'workflow_run','workflow_step','document_proposal','editing_session',
+    'approval','gate','decision','filing','proceeding','hearing','order',
+    'resource_grant','library_item','library_version','matter_close'
+  ]
+  loop
+    execute format('alter table app.%I add column if not exists revision bigint not null default 1', t);
+    execute format('drop trigger if exists %I on app.%I', t || '_revision', t);
+    execute format(
+      'create trigger %I before update on app.%I for each row execute function app.bump_revision()',
+      t || '_revision', t);
+  end loop;
+end $$;
+
+-- Remaining mutable Matter resources: add a revision where it is meaningful.
+do $$
+declare t text;
+begin
+  for t in
+    select c.table_name
+    from information_schema.columns c
+    where c.table_schema = 'app'
+      and c.column_name = 'matter_id'
+      and c.table_name not in (
+        'document_version','document_text','document_chunk','document_anchor',
+        'agent_event','agent_run','context_package','message',
+        'fact_position','evidence_status','registry_event','run_bundle',
+        'playbook_run','step_run','job','notification_delivery',
+        'verification_run','retrieval_packet'
+      )
+      and not exists (
+        select 1 from information_schema.columns r
+        where r.table_schema = 'app'
+          and r.table_name = c.table_name
+          and r.column_name = 'revision'
+      )
+  loop
+    execute format('alter table app.%I add column revision bigint not null default 1', t);
+    execute format(
+      'create trigger %I before update on app.%I for each row execute function app.bump_revision()',
+      t || '_revision', t);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Same-Matter guards
+-- ---------------------------------------------------------------------------
+create or replace function app.check_document_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  if new.folder_id is not null then
+    select matter_id into v_matter from app.folder where id = new.folder_id;
+    if v_matter is distinct from new.matter_id then
+      raise exception 'document folder belongs to another matter' using errcode = '23514';
+    end if;
+  end if;
+  if new.current_version_id is not null then
+    select matter_id into v_matter from app.document_version where id = new.current_version_id;
+    if v_matter is distinct from new.matter_id then
+      raise exception 'document current version belongs to another matter' using errcode = '23514';
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger document_scope before insert or update on app.document
+  for each row execute function app.check_document_scope();
+
+create or replace function app.check_filing_item_scope() returns trigger
+language plpgsql as $$
+declare v_document uuid; v_matter uuid;
+begin
+  select document_id, matter_id into v_document, v_matter
+    from app.document_version where id = new.document_version_id;
+  if v_document is distinct from new.document_id or v_matter is distinct from new.matter_id then
+    raise exception 'filing item version belongs to another document or matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger filing_item_scope before insert or update on app.filing_item
+  for each row execute function app.check_filing_item_scope();
+
+create or replace function app.check_exhibit_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  select matter_id into v_matter from app.evidence where id = new.evidence_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'exhibit evidence belongs to another matter' using errcode = '23514';
+  end if;
+  select matter_id into v_matter from app.proceeding where id = new.proceeding_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'exhibit proceeding belongs to another matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger exhibit_scope before insert or update on app.exhibit
+  for each row execute function app.check_exhibit_scope();
+
+create or replace function app.check_fact_evidence_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  select matter_id into v_matter from app.fact where id = new.fact_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'fact belongs to another matter' using errcode = '23514';
+  end if;
+  select matter_id into v_matter from app.evidence where id = new.evidence_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'evidence belongs to another matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger fact_evidence_scope before insert or update on app.fact_evidence
+  for each row execute function app.check_fact_evidence_scope();
+
+create or replace function app.check_task_document_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  select matter_id into v_matter from app.task where id = new.task_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'task belongs to another matter' using errcode = '23514';
+  end if;
+  select matter_id into v_matter from app.document where id = new.document_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'document belongs to another matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger task_document_scope before insert or update on app.task_document
+  for each row execute function app.check_task_document_scope();
+
+create or replace function app.check_document_relation_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  select matter_id into v_matter from app.document where id = new.from_document_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'relation source belongs to another matter' using errcode = '23514';
+  end if;
+  select matter_id into v_matter from app.document where id = new.to_document_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'relation target belongs to another matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger document_relation_scope before insert or update on app.document_relation
+  for each row execute function app.check_document_relation_scope();
+
+create or replace function app.check_document_proposal_scope() returns trigger
+language plpgsql as $$
+declare v_document uuid;
+begin
+  select document_id into v_document from app.document_version where id = new.base_version_id;
+  if v_document is distinct from new.document_id then
+    raise exception 'proposal base belongs to another document' using errcode = '23514';
+  end if;
+  if new.applied_version_id is not null then
+    select document_id into v_document from app.document_version where id = new.applied_version_id;
+    if v_document is distinct from new.document_id then
+      raise exception 'proposal result belongs to another document' using errcode = '23514';
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger document_proposal_scope before insert or update on app.document_proposal
+  for each row execute function app.check_document_proposal_scope();
+
+create or replace function app.check_message_run_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  if new.author_run_id is not null then
+    select matter_id into v_matter from app.agent_run where id = new.author_run_id;
+    if v_matter is distinct from new.matter_id then
+      raise exception 'message run belongs to another matter' using errcode = '23514';
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger message_run_scope before insert or update on app.message
+  for each row execute function app.check_message_run_scope();
+
+create or replace function app.check_browser_lease_scope() returns trigger
+language plpgsql as $$
+declare v_matter uuid;
+begin
+  select matter_id into v_matter from app.browser_session where id = new.session_id;
+  if v_matter is distinct from new.matter_id then
+    raise exception 'browser session belongs to another matter' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger browser_lease_scope before insert or update on app.browser_control_lease
+  for each row execute function app.check_browser_lease_scope();
+
+-- ---------------------------------------------------------------------------
+-- Delete and append-only guards
+-- ---------------------------------------------------------------------------
+create or replace function app.reject_delete() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'delete is disabled; archive instead' using errcode = '55000';
+end $$;
+
+create or replace function app.reject_nonempty_delete() returns trigger
+language plpgsql as $$
+begin
+  if exists (select 1 from app.document where folder_id = old.id) then
+    raise exception 'section is not empty' using errcode = '55000';
+  end if;
+  if exists (select 1 from app.folder where parent_id = old.id) then
+    raise exception 'section has child sections' using errcode = '55000';
+  end if;
+  return old;
+end $$;
+
+create or replace function app.reject_application_delete() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'applications are archived, not deleted' using errcode = '55000';
+end $$;
+
+create or replace function app.reject_document_delete() returns trigger
+language plpgsql as $$
+begin
+  if exists (select 1 from app.document_version where document_id = old.id) then
+    raise exception 'documents with versions are archived, not deleted' using errcode = '55000';
+  end if;
+  return old;
+end $$;
+
+drop trigger if exists matter_delete_guard on app.matter;
+create trigger matter_delete_guard before delete on app.matter
+  for each row execute function app.reject_delete();
+
+drop trigger if exists folder_delete_guard on app.folder;
+create trigger folder_delete_guard before delete on app.folder
+  for each row execute function app.reject_nonempty_delete();
+
+drop trigger if exists application_delete_guard on app.proceeding_application;
+create trigger application_delete_guard before delete on app.proceeding_application
+  for each row execute function app.reject_application_delete();
+
+drop trigger if exists document_delete_guard on app.document;
+create trigger document_delete_guard before delete on app.document
+  for each row execute function app.reject_document_delete();
+
+drop trigger if exists fact_position_append_only on app.fact_position;
+create trigger fact_position_append_only before update or delete on app.fact_position
+  for each row execute function app.reject_mutation();
+
+drop trigger if exists evidence_status_append_only on app.evidence_status;
+create trigger evidence_status_append_only before update or delete on app.evidence_status
+  for each row execute function app.reject_mutation();
+
+drop trigger if exists registry_event_append_only on app.registry_event;
+create trigger registry_event_append_only before update or delete on app.registry_event
+  for each row execute function app.reject_mutation();
+
+create or replace function app.reject_exhibit_no_change() returns trigger
+language plpgsql as $$
+begin
+  if old.exhibit_no is distinct from new.exhibit_no then
+    raise exception 'exhibit number is append-only' using errcode = '55000';
+  end if;
+  return new;
+end $$;
+drop trigger if exists exhibit_no_append_only on app.exhibit;
+create trigger exhibit_no_append_only before update on app.exhibit
+  for each row execute function app.reject_exhibit_no_change();
+
+-- ---------------------------------------------------------------------------
+-- New table ownership and grants
+-- ---------------------------------------------------------------------------
+insert into ops.table_owner (table_name, module) values
+  ('user_credential','identity'),
+  ('delegation','identity'),
+  ('matter_close','matter')
+on conflict (table_name) do update set module = excluded.module;
+
+grant select, insert, update, delete on app.delegation, app.matter_close to maverick_app;
+grant select on app.delegation, app.matter_close to maverick_readonly;
+revoke all on app.user_credential from maverick_app, maverick_readonly;
+grant select, insert, update, delete on app.user_credential to maverick_owner;
+
+-- Restricted-document children must not fall back to the generic Matter edit
+-- policy; their access follows the document or version grant.
+drop policy if exists document_write on app.document;
+drop policy if exists document_version_write on app.document_version;
+
+drop policy if exists document_text_access on app.document_text;
+drop policy if exists document_text_read on app.document_text;
+drop policy if exists document_text_write on app.document_text;
+create policy document_text_read on app.document_text for select
+  using (app.has_document_version_access(document_version_id, 'view'));
+create policy document_text_write on app.document_text for all
+  using (app.has_document_version_access(document_version_id, 'edit'))
+  with check (app.has_document_version_access(document_version_id, 'edit'));
+
+drop policy if exists document_anchor_access on app.document_anchor;
+drop policy if exists document_anchor_read on app.document_anchor;
+drop policy if exists document_anchor_write on app.document_anchor;
+create policy document_anchor_read on app.document_anchor for select
+  using (app.has_document_version_access(document_version_id, 'view'));
+create policy document_anchor_write on app.document_anchor for all
+  using (app.has_document_version_access(document_version_id, 'edit'))
+  with check (app.has_document_version_access(document_version_id, 'edit'));
+
+drop policy if exists document_chunk_access on app.document_chunk;
+drop policy if exists document_chunk_read on app.document_chunk;
+drop policy if exists document_chunk_write on app.document_chunk;
+create policy document_chunk_read on app.document_chunk for select
+  using (app.has_document_version_access(document_version_id, 'view'));
+create policy document_chunk_write on app.document_chunk for all
+  using (app.has_document_version_access(document_version_id, 'edit'))
+  with check (app.has_document_version_access(document_version_id, 'edit'));
+
+drop policy if exists annotation_access on app.annotation;
+drop policy if exists annotation_read on app.annotation;
+drop policy if exists annotation_write on app.annotation;
+create policy annotation_read on app.annotation for select
+  using (app.has_document_version_access(document_version_id, 'view'));
+create policy annotation_insert on app.annotation for insert
+  with check (
+    app.has_document_version_access(document_version_id, 'view')
+    and author_id = app.current_user()
+  );
+create policy annotation_update on app.annotation for update
+  using (author_id = app.current_user())
+  with check (author_id = app.current_user());
+create policy annotation_delete on app.annotation for delete
+  using (author_id = app.current_user());
+
+drop policy if exists document_relation_access on app.document_relation;
+drop policy if exists document_relation_read on app.document_relation;
+drop policy if exists document_relation_write on app.document_relation;
+create policy document_relation_read on app.document_relation for select
+  using (app.has_document_relation_access(from_document_id, to_document_id));
+create policy document_relation_write on app.document_relation for all
+  using (
+    app.has_document_access(from_document_id, 'edit')
+    and app.has_document_access(to_document_id, 'edit')
+  )
+  with check (
+    app.has_document_access(from_document_id, 'edit')
+    and app.has_document_access(to_document_id, 'edit')
+  );
+
+-- Membership: a delegate with settings may manage non-admin members; only an
+-- admin may create, modify or remove an admin.
+drop policy if exists membership_self on app.membership;
+drop policy if exists membership_admin on app.membership;
+drop policy if exists membership_read on app.membership;
+drop policy if exists membership_write on app.membership;
+create policy membership_read on app.membership for select
+  using (
+    user_id = app.current_user()
+    or app.is_admin()
+    or app.is_delegate('settings')
+  );
+create policy membership_write on app.membership for all
+  using (app.is_admin() or app.is_delegate('settings'))
+  with check (app.is_admin() or app.is_delegate('settings'));
+
+create or replace function app.reject_delegate_admin_role() returns trigger
+language plpgsql as $$
+begin
+  if current_user = 'maverick_owner' then
+    return new;
+  end if;
+  if not app.is_admin() and new.role = 'admin' then
+    raise exception 'only an admin may promote an admin' using errcode = '42501';
+  end if;
+  if tg_op = 'UPDATE' and old.role = 'admin' and not app.is_admin() then
+    raise exception 'only an admin may modify an admin' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists membership_admin_guard on app.membership;
+create trigger membership_admin_guard before insert or update on app.membership
+  for each row execute function app.reject_delegate_admin_role();
+alter function app.reject_delegate_admin_role() owner to maverick_owner;

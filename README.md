@@ -41,10 +41,10 @@ uv run python -m tools.verify --full
 
 The command surface and full check list are in
 [repo-scaffold.md](docs/implementation/repo-scaffold.md) §4. `--fast` is the edit loop: Markdown and
-comment policy, mypy, TypeScript, ruff, ESLint, import-linter, dependency-cruiser and operation parity.
-`--full` adds pytest, the negative fixtures, `pip-audit` and `npm audit`, `uv lock --check`, and the
-baseline/RLS schema check. It requires Python 3.14, `uv` 0.13.10, Node 26.13.1, `psql` on `PATH`, and a
-disposable PostgreSQL 17.12 database with pgvector:
+comment policy, mypy, TypeScript, ruff, ESLint, import-linter, dependency-cruiser, operation parity and
+table ownership. `--full` adds pytest, the negative fixtures, `pip-audit` and `npm audit`, `uv lock --check`,
+and the baseline/RLS schema check. It requires Python 3.14, `uv` 0.13.10, Node 26.13.1, `psql` on `PATH`,
+and a disposable PostgreSQL 17.12 database with pgvector:
 
 ```bash
 docker run --rm -d --name mavrykx-pg -p 55433:5432 \
@@ -58,9 +58,9 @@ uv run python -m tools.verify --full
 Docker is a development convenience here, never a product dependency. The integration test drops and
 recreates the `app`, `audit`, `ref` and `ops` schemas; point it only at a disposable database.
 
-CI runs `--full` on every pull request and on pushes to `main` against `pgvector/pgvector:pg17`
-(PostgreSQL 17.12); the `verify` check is required on `main`. E2E, contract-drift, table-ownership,
-court-leak and docs-agree checks are not wired yet.
+CI is not used for this local setup; run `--full` locally. If CI is re-enabled, it runs `--full` on
+`pgvector/pgvector:pg17` (PostgreSQL 17.12) and the `verify` check is required on `main`. E2E,
+contract-drift, court-leak and docs-agree checks are not wired yet.
 
 **Build in the architecture doc's order.** Each step's gate must pass before the next. The design is
 not a claim that the product exists.

@@ -29,7 +29,7 @@ These are the service groups the CRM implements first. The names are contracts, 
 
 | Group | Service surface |
 |---|---|
-| `identity` | Firm bootstrap, user invite, membership role, session, device and delegation. |
+| `identity` | Firm bootstrap, user invite, credentials, membership role, session, device and delegation. |
 | `access` | Matter member add/revoke with `edit` or `view`, restricted-document resource grant, the one `access.can(actor, resource, action)` policy. |
 | `contacts` | Contact and client create/update; a client may own many Matters. |
 | `matter` | Matter open/update/close, party add, note create/edit/archive. |
@@ -307,8 +307,9 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
   pinpoint), primary law (instrument version or provision), source material (document version and
   anchor; appendices through a document relation or filing item) and external source (URL and content
   hash). Exactly one target is set. Primary law covers statutes, court rules, regulations, notifications,
-  practice directions and manuals; judgments are case law, not primary law. The baseline has
-  `judgment.case_number` but no neutral citation column; add `neutral_citation` with the case-law module.
+  practice directions and manuals; judgments are case law, not primary law. The baseline has the
+  explicit target columns, the one-target check and `judgment.neutral_citation`; `authority` remains
+  legacy.
 - `pydantic_ai.Citation` is provider metadata attached to a text part. `Citations` is a Pydantic AI
   capability, not a Harness capability. Provider citations are optional and provider-specific; they
   attach to text output only, structured output drops them, and the AG-UI adapter does not forward them
@@ -349,7 +350,8 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 ## 10. Security
 
 - Local accounts + TOTP + server sessions + device keys; OIDC optional.
-- Argon2id passwords (`argon2-cffi`); TOTP (`pyotp`); breached-password check.
+- Argon2id passwords (`argon2-cffi`); TOTP (`pyotp`); breached-password check. Credentials live in
+  `user_credential`, which the app role cannot select directly.
 - Sessions are opaque 256-bit tokens stored hashed in `session`; revocation sets `revoked_at` and the token is rejected. A later retention job may purge old revoked sessions. JWTs are only for short-lived document URLs and the signed local-editor config.
 - Step-up auth for commit, filing-ready, send, grant, delete.
 - Firm roles `admin`, `lawyer`, `staff`, `intern`; a firm admin is a lawyer. The access policy is owned by

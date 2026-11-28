@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import comments, markdown_policy, negative, operations, schema
+from tools import comments, markdown_policy, negative, operations, ownership, schema
 from tools.errors import ToolMissing
 from tools.findings import Finding, render_all
 
@@ -111,6 +111,10 @@ def _operations() -> tuple[bool, str]:
     return _from_findings(operations.check())
 
 
+def _ownership() -> tuple[bool, str]:
+    return _from_findings(ownership.check(ROOT))
+
+
 CHECKS: tuple[Check, ...] = (
     Check("C1-C3 Markdown policy", ("C1", "C2", "C3"), True, _markdown),
     Check("A3   Comment policy", ("A3",), True, _comments),
@@ -121,6 +125,7 @@ CHECKS: tuple[Check, ...] = (
     Check("B1/B6 Python layers", ("B1", "B6"), True, _import_linter),
     Check("B4/B6 Renderer isolation", ("B4", "B6"), True, _depcruise),
     Check("B2/B3/D2 Operations", ("B2", "B3", "D2"), True, _operations),
+    Check("B8   Table ownership", ("B8",), True, _ownership),
     Check("T    Unit tests", ("T",), False, _pytest),
     Check("N    Negative fixtures", ("N",), False, _negative),
     Check("A6   Dependency audit", ("A6",), False, _audit),
