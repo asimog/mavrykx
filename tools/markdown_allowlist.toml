@@ -49,3 +49,7 @@ reason = "Design authority: the Matter workspace, access and live editing."
 [[file]]
 path = "docs/v1/05-product-experience.md"
 reason = "Design authority: navigation, Matter workspace and product surfaces."
+
+[[file]]
+path = "references/README.md"
+reason = "Reference-repository study: pins, licences, test results, patterns and reuse restrictions."

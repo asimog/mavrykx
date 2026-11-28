@@ -1,0 +1,50 @@
+{
+  "generated": "2026-11-28",
+  "policy": "Reference-only. The clones live outside the repository at C:/dev/reference. They are not vendored, imported, built, linked or shipped with MavrykX.",
+  "references": [
+    {
+      "name": "Kosmos",
+      "url": "https://github.com/Kosmos-Law/kosmos",
+      "clone_path": "C:/dev/reference/kosmos",
+      "default_branch": "dev",
+      "commit": "699556325f69aa7c39c7a0f8b00e127faedd3490",
+      "commit_date": "2026-11-22",
+      "tag": null,
+      "release": null,
+      "why_no_release": "The repository has no tagged release; the latest commit on the default branch is the study point.",
+      "licence": "AGPL-3.0",
+      "licence_file": "references/licenses/kosmos-AGPL-3.0.txt",
+      "language": "Python/Django",
+      "tests": "3,455 tests collected; 40 passed and 12 skipped in the non-database subset; database suite blocked because PostgreSQL/pgvector was unavailable.",
+      "tested": "See references/README.md for the exact commands and results."
+    },
+    {
+      "name": "Stella",
+      "url": "https://github.com/stella/stella",
+      "clone_path": "C:/dev/reference/stella",
+      "default_branch": "main",
+      "commit": "0322889e3861dcb6807dd12a7cbe48504077af44",
+      "commit_date": "2026-11-27",
+      "tag": "v0.9.93",
+      "release": "v0.9.93",
+      "licence": "Apache-2.0",
+      "licence_file": "references/licenses/stella-Apache-2.0.txt",
+      "notice_file": "references/licenses/stella-NOTICE.txt",
+      "language": "TypeScript/Bun",
+      "tests": "Dependency-free workspace-model, policy-evidence, concurrency and auth-model tests passed (33 tests across the reported files); full suite blocked by missing node_modules.",
+      "submodules": [
+        {
+          "path": ".ai/shared",
+          "url": "https://github.com/stella/ai-shared.git",
+          "commit": "b1289e96d1e8f8f7bf2f0b67cef6e3992e02d840"
+        },
+        {
+          "path": "packages/template-packs/content",
+          "url": "https://github.com/stella/template-packs.git",
+          "commit": "6abcec0fbd61651ed8b70c407a4b0c3f80570d0f"
+        }
+      ],
+      "tested": "See references/README.md for the exact commands and results."
+    }
+  ]
+}
