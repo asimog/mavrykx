@@ -121,7 +121,7 @@ allow = firm membership
 - The service checks it; RLS re-checks it. The UI is not the boundary.
 - The visibility rule is declared once and reused by the service and RLS; the API and SQL expressions are bound by the same negative tests.
 
-**Implementation gate.** The baseline `note` policy is Matter-wide, the baseline `task` policy lets a firm admin read a private task, and the baseline `agent_run` policy lets a firm admin read a private trace. Private notes, private tasks and private traces are not exposed until the step 3 policy migration narrows all three to the owner (and, for a task, its assignee). No private resource ships on application checks alone.
+**Implementation gate.** The baseline `note` policy is Matter-wide; the baseline `task` policy lets a firm admin read a private task; the baseline `agent_run` policy lets a firm admin read a private trace; and the baseline `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` policies are Matter-wide rather than following a restricted document. Private notes, private tasks and private traces are not exposed until the step 3 policy migration narrows them to the owner (and, for a task, its assignee); restricted-document child rows are not exposed until the step 4 policy migration follows `has_document_access`. No private or restricted resource ships on application checks alone.
 
 ---
 

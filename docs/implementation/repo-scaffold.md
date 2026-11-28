@@ -37,7 +37,7 @@ One pin owns each runtime. The lockfile is the evidence, not the prose.
 | Coverage | `pytest-cov` | `7.1.0` | |
 | Security | `pip-audit` / `npm audit` | `2.10.1` / npm | dependency vulnerabilities; ruff `S` covers code patterns |
 | DB | PostgreSQL | `17.12` | target, not a package |
-| Vector | `pgvector` | `0.5.1` | |
+| Vector | `pgvector` extension | `0.8.7` | Python client `0.5.1` |
 | Desktop | Electron | `45.5.0` | Chromium `156.0.8078.109`, Node `24.22.3`; bundled Node is the native ABI |
 | UI | React / React DOM | `19.3.1` | |
 | Routing | `@tanstack/react-router` | `1.170.46` | |

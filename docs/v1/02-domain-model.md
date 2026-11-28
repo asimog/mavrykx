@@ -315,7 +315,7 @@ erDiagram
 
 **Event:** scheduled → held or cancelled. A deadline is proposed → confirmed → met, missed or waived; a hearing follows its proceeding. The calendar is derived.
 
-**Edit lease:** idle → active → closed, expired or revoked. One lease per document. A save is accepted only while the lease is active and the base still matches.
+**Edit lease:** idle → opening → active → closing → closed, failed or revoked. One lease per document; an expiry closes the lease with a failure code and is audited. A save is accepted only while the lease is active and the base still matches.
 
 **Submission and review:** requested → in review → approved or returned. A submission is the task + submitted version + approval + annotations + notification; a return rejects the approval and reopens the task. The version survives.
 
@@ -440,6 +440,8 @@ The V1 baseline now includes the classification record, forum adapter, browser s
 
 The CRM substrate is already in the baseline: `firm`, `user`, `membership`, `contact`, `client`, `matter`, `matter_member`, `note` with visibility, `task` with visibility, assignee and work kind, `appointment`, `folder`, `document` and `document_version`, `conversation` with visibility, `message`, `resource_grant`, `editing_session`, `approval` and the audit chain. A **section** is a `folder` row; this update introduces no second container table.
 
-Three policy gaps are scheduled, not silently accepted. The baseline `note` policy is Matter-wide rather than honouring `note.visibility`; the baseline `task` policy lets a firm admin read a private task; and the baseline `agent_run` policy lets a firm admin read a private trace. The shared-workspace step narrows all three before private notes, private tasks or private traces are exposed. Private resources do not ship on application checks alone.
+Policy gaps are scheduled, not silently accepted. The baseline `note` policy is Matter-wide rather than honouring `note.visibility`; the baseline `task` policy lets a firm admin read a private task; the baseline `agent_run` policy lets a firm admin read a private trace; and the baseline `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` policies are Matter-wide rather than following a restricted document. The shared-workspace and document steps narrow all of them before private notes, private tasks, private traces or restricted-document child rows are exposed. Private and restricted resources do not ship on application checks alone.
+
+Baseline details are retained or migrated explicitly. `editing_session` keeps `checkpoint_sha256`/`checkpoint_at` and `document_version.source` keeps `editor_recovery` for the deferred shared session; V1 writes neither. The `editing_session` status set is `opening`, `active`, `closing`, `closed`, `failed` or `revoked`; an expiry is a close with a failure code, not a separate status. `appointment.matter_id` is nullable in the baseline; the V1 service creates appointments inside a Matter, and the step 5 migration makes the column not null. The baseline has no idempotency key on `document_version` or `editing_session` and no takeover-request columns; step 4 must add them before save retries or takeover are claimed.
 
 Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. V1 modules do not write them; `corpus`, `case_law`, `rules` and `workflow_*` are the live path. A later cleanup migration may drop them once no old reader remains.

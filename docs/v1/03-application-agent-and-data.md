@@ -94,7 +94,7 @@ The gateway is wired in step 7. Until then the same operations are exercised thr
 
 ## 3. Tools, Harness capabilities and bundles
 
-- **Tool** — one typed callable: name, input schema, output schema, side effects, permissions. The tool catalog is the one definition of a business action.
+- **Tool** — one typed callable: name, input schema, output schema, side effects, permissions. The operation catalog is the one definition of a business action; the tool catalog is its agent-facing subset.
 - **Harness capability** — a Pydantic AI composable unit that may add tools, instructions, hooks, state and lifecycle. Examples: `Skills`, `Memory`, `AskUser`, `SubAgents`, `StepPersistence`, `ToolSearch`, `Compaction`.
 - **Bundle** — a versioned selection of tools, instructions, sub-agent tools, permissions, budget, evals and owner.
 - **Legal capability pack** — MavrykX-authored Harness capabilities that wrap legal services and constraints.
@@ -286,7 +286,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Append-only, hash-chained legal/security events.
 - Every workspace mutation emits an event, not only document versions and legal records: section, note, task, assignment, event, conversation, message, document, review, approval and deletion.
 - Who, what, when, which Matter, which subject, why, previous/next revision or hash, evidence reference.
-- Performer type is `user`, `agent` or `service`; trigger is `direct`, `delegation` or `schedule`; an agent event also carries the run, initiating user, approval status and approver.
+- Performer type is `user`, `agent` or `system`; trigger is `direct`, `delegation` or `schedule`. The baseline `audit_event` stores the performer, action, subject, Matter and a JSONB payload; the trigger, run, initiating user, approval status and approver travel in that payload until a later migration promotes them to columns.
 - A document event names the version and hash. A review event names the submitted hash and decision. A deletion names what was removed or archived.
 - Immutable; app role can append via function and read, not update/delete.
 - Retention: life of Matter + 7 years; legal hold blocks deletion.
@@ -305,7 +305,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Firm roles `admin`, `lawyer`, `staff`; Matter access `lead`, `editor`, `viewer`, `approver`. An intern is a staff/lawyer user with Matter `editor` access, not a new role.
 - Firm administration is not Matter access. A firm admin who is not a Matter member reads no Matter content.
 - Private notes are owner-only; private tasks are creator and assignee; private conversations are owner-only; restricted documents need a grant. No `lead` or `approver` reads private content by role.
-- The baseline `note`, `task` and `agent_run` policies are broader than that rule; step 3 narrows them before private notes, private tasks or private traces are exposed.
+- The baseline `note`, `task`, `agent_run` and restricted-document child policies are broader than that rule; the workspace and document steps narrow them before private notes, private tasks, private traces or restricted-document child rows are exposed.
 - Agent inherits the launching user, intersected with the bundle; no wider access.
 - A shared conversation never widens document access.
 - V1 has no hosted DocumentServer, no Docker dependency and no real-time co-editing; the editor is local and saves through the API.
