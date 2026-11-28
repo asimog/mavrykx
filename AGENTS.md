@@ -22,6 +22,18 @@ MavrykX is a self-hosted legal-work platform for one firm; Maverick is its one a
 
 Design decisions live in `docs/v1/`; pins, checks and plans live in `docs/implementation/`. Update the owning document, not this file.
 
+## Working with the user
+
+- Say your next action in one line. Update every few tool calls.
+- End with a standalone recap: findings, actions, next step.
+- Treat answered questions as done. Focus on the new request; revisit old answers only if asked or wrong.
+
+## Writing
+
+- Write for a smart reader. Make messages self-contained; key point first.
+- Use plain words, short active sentences, one idea each. Use one word per thing; do not invent terms.
+- Use prose for connected ideas, bullets for separate items. Be concise; keep needed context.
+
 ## Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
