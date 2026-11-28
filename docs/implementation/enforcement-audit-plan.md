@@ -30,7 +30,7 @@ The lockfile is the evidence. A prose pin that disagrees with the lock is a defe
 | Control | Decision | Reason |
 |---|---|---|
 | `docs/v1/` as the five-document design set | **Keep** | One owner per truth |
-| `AGENTS.md` laws | **Keep**, as rationale | Not enforcement; points at checks |
+| `AGENTS.md` repository map | **Keep** | It is an index, not a rule store |
 | SQL appendix + RLS negative test | **Keep and extend** | CI migrates and runs the probes |
 | Table-ownership rule | **Keep** | `ops.table_owner` plus `tools/ownership.py` in `--fast` |
 | Layering rules in `01` §6 | **Extend** | Enforced today by import-linter and dependency-cruiser |
@@ -145,7 +145,7 @@ and assert a failure that names the rule.
 | C1 | Unapproved Markdown | Repository | `tools/markdown_policy.py` | Update the owner, or add an allowlist entry with a reason | New file not in the manifest fails |
 | C2 | `FINAL`/`V2`/temporary report | Filenames, headings | same script | Rename to the owner | `FINAL-architecture.md` fails |
 | C3 | Duplicate design authority | `docs/` | manifest + duplicate-title check | Point at the owner | Second architecture doc fails |
-| C4 | Prose-only rule | `AGENTS.md` | review checklist + rule ID in the check | Add a check, cite its ID | Rule without a check fails the audit script |
+| C4 | Prose-only rule | `docs/v1/` | review checklist + rule ID in the check | Add a check, cite its ID | Rule without a check fails the audit script |
 
 ### D. Authority and permissions
 

@@ -6,18 +6,15 @@ How the engineering skills consume this repo's domain documentation when explori
 
 - **`docs/v1/02-domain-model.md`** — the canonical definitions, entities, ownership, relationships,
   lifecycles and invariants.
-- **`AGENTS.md` § Working vocabulary** — a short reminder of the highest-risk distinctions; it points at
-  the domain model rather than replacing it.
 - **The rest of `docs/v1/`** as needed. Each decision lives in the document where it applies.
 
 This repo keeps no `GLOSSARY.md` and no `docs/adr/`. Do not create them. Vocabulary has one writer,
-`docs/v1/02-domain-model.md`; `AGENTS.md` carries only the short working vocabulary and points here.
-Decisions have one writer, the document that owns them.
+`docs/v1/02-domain-model.md`. Decisions have one writer, the document that owns them.
 
 ## Use the vocabulary
 
 When your output names a domain concept — an issue title, a proposal, a hypothesis, a test name — use
-the term as defined in those two sources. Do not drift to synonyms the model rejects: a Matter is not
+the term as defined in the domain model. Do not drift to synonyms the model rejects: a Matter is not
 a proceeding, a hearing is not an order, a fact is not evidence, a document is not a version, an
 authority is not a citation, a task is not a deadline. Rejected entities stay rejected: `action`,
 `assignment`, sub-matter, `Workspace` or `Project` for the Matter.
