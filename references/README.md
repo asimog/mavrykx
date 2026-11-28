@@ -71,7 +71,7 @@ Stella is a broad TypeScript legal workspace. It is the stronger reference for *
 - **Three layers.** Organisation role matrix; Matter visibility (`all_members`, `admins_and_assigned`, `assigned_only`) plus membership; credential attenuation (role AND API-key scope).
 - **One visibility rule in SQL.** `stella_authorized_workspace_ids` and the security-barrier view are reused by RLS; the API and SQL copies are bound by tests. This is the pattern MavrykX adopts.
 - **Append-only audit.** `audit_logs` records performer type (`user`/`agent`/`service`), trigger (`direct`/`agent_delegation`/`schedule`), run id, approval status and approver. The app role can insert and select, not update or delete.
-- **Private content exists** for reader annotations, skills and per-user chat threads. Matter visibility still lets owners/admins see wider Matters, which conflicts with MavrykX's owner-only private note/task/conversation rule.
+- **Private content exists** for reader annotations, skills and per-user chat threads. Matter visibility still lets owners/admins see wider Matters. MavrykX does not adopt this: its notes, tasks and conversations are Matter-wide.
 
 ### Documents and collaboration
 
@@ -110,8 +110,8 @@ A full typecheck and database test were not attempted; they need a full install,
 ## 3. What MavrykX adopted
 
 - **CRM first.** Kosmos confirms that the Matter-management substrate is a product on its own; Stella confirms that the agent is a later layer. The build order in `01-architecture.md` puts firm, clients, Matters, workspace, documents, work and review before the harness.
-- **Matter membership, not a firm-wide flag.** MavrykX keeps `matter_member`, `ethical_wall` and `resource_grant`; a firm admin is not a Matter bypass.
-- **Private resources.** MavrykX keeps owner-only private notes, tasks and conversations. This is deliberately stricter than both references.
+- **Simple firm hierarchy.** MavrykX keeps `matter_member` with `edit`/`view`, no ethical wall, and `resource_grant` for restricted documents. A firm admin reads every Matter and assigns Matter access to lawyers, staff and interns.
+- **No private resources.** MavrykX makes notes, tasks and conversations Matter-wide. This is deliberately simpler than Stella's private chat threads.
 - **Immutable versions and a current pointer.** MavrykX already had this; Stella's `expectedCurrentVersionId` and single-writer session sharpen the sequential save contract.
 - **One edit lease, base-bound save.** The lease and stale-save refusal are MavrykX's answer to Kosmos's last-write-wins and Stella's per-user/takeover session. MavrykX keeps the explicit takeover idea but drops Stella's server checkpoint; the local editor owns the unsaved buffer.
 - **Write contracts and revisions.** The `patch`/`replace` precondition and opaque revision token in `03-application-agent-and-data.md` come from Stella's write-contract check.
@@ -127,7 +127,7 @@ A full typecheck and database test were not attempted; they need a full install,
 - **Kosmos's all-or-nothing permissions, mutable history, destructive OCR, PDF-only record, last-write-wins editing or time-entry approval.**
 - **Stella's real-time Yjs/Hocuspocus editor.** V1 is sequential Euro-Office; the fencing/publish discipline is retained, the service is not.
 - **Stella's conflict-check subsystem.** MavrykX explicitly rejects one; the matter-open gate records client and scope.
-- **Stella's Matter-visibility tiers.** `all_members`, `admins_and_assigned` and `assigned_only` are a useful Matter boundary, but MavrykX uses Matter membership plus per-resource visibility; a tier does not make a private note or task visible to a `lead`.
+- **Stella's Matter-visibility tiers.** `all_members`, `admins_and_assigned` and `assigned_only` are a useful Matter boundary, but MavrykX uses a simple `edit`/`view` Matter grant. A firm admin sees every Matter; there is no private-resource tier.
 - **Kosmos's configurable party groups.** The fixed `matter_party` role set is enough for V1; configurable groups are a later migration, not a first-CRM requirement.
 - **Stella's generic entity model.** MavrykX keeps typed legal records (document, note, task, event, conversation) because a universal entity table would make the legal invariants shallow.
 - **Stella's SaaS surface, migration sprawl, branding, sample matters, template text and case-law corpus.**
@@ -160,4 +160,4 @@ Update `manifest.json`, the pins above and the test results only after re-runnin
 - Kosmos has no releases, so the study point is a moving `dev` commit. Pin the exact commit above; do not describe it as a stable release.
 - Stella's full build and database tests remain unexercised in this environment. Treat the dependency-free results as evidence of the model, not of the whole product.
 - The Stella `.ai/shared` submodule has no licence. It must not be used as a source until its terms are clarified.
-- Neither reference implements MavrykX's Indian litigation layer or its owner-only private-resource rule. Those remain MavrykX decisions, not borrowed ones.
+- Neither reference implements MavrykX's Indian litigation layer or its simple firm-admin hierarchy. Those remain MavrykX decisions, not borrowed ones.

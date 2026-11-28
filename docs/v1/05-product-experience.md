@@ -60,8 +60,8 @@ The Matter spine is always visible: client, parties, proceedings, current step, 
 - **Overview** — client, scope, key dates, open gates, current work, open reviews, recent activity.
 - **Work** — tasks, assignments, deadlines, decisions, workflow runs.
 - **Documents** — the Matter’s section tree; versions, status, filing sets; the edit-lease holder and current version. No live audience or cursors.
-- **Notes** — shared and private notes, with headings as content; attribution and last change.
-- **Conversations** — private, shared and Matter-wide rooms; messages are attributed and immutable.
+- **Notes** — Matter notes, with headings as content; attribution and last change.
+- **Conversations** — Matter-wide rooms; messages are attributed and immutable.
 - **Calendar** — hearings, meetings, deadlines and other events; derived from the record.
 - **Evidence & Facts** — fact matrix, evidence register, chronology, links.
 - **Research & Authorities** — queries, results, corpus/case-law status, citation status, research submissions.
@@ -117,7 +117,7 @@ The panel shows what blocks what. A missing filing date does not block evidence 
 
 A dock, not a separate app. Available on every Matter screen once step 7 is built; the CRM works without it.
 
-- **Scope banner** — Matter, conversation visibility, the initiating user's Matter access, bundles, model, budget, node. The agent never claims wider access than the user.
+- **Scope banner** — Matter, the initiating user's Matter access, bundles, model, budget, node. The agent never claims wider access than the user.
 - **Composer** — ask, instruct, attach a document/source.
 - **Run timeline** — thinking states in the lawyer’s language; expandable to tool calls and sources.
 - **Approval cards** — exact operation, subject, hash, diff, cost.
@@ -152,9 +152,9 @@ A review is the supervising lawyer's decision on a submitted version. An approva
 ## 9. Settings and access
 
 - **Firm** — name, defaults, retention, model policy.
-- **Members** — invite as admin, lawyer or staff; role, title, disable, sessions/devices; first member is admin. Firm administration is not Matter access.
+- **Members** — invite as admin, lawyer, staff or intern; role, title, disable, sessions/devices; first member is admin. A firm admin reads every Matter and assigns Matter access.
 - **Clients and contacts** — deduplicated people/organisations, client status, a client’s Matters.
-- **Matter access** — `lead`, `editor`, `viewer`, `approver`; grants, walls, resource grants for restricted documents, shared conversations and private tasks. An intern is a staff/lawyer user with `editor` access.
+- **Matter access** — `edit` or `view`; a firm admin assigns it. Restricted documents use a resource grant, except for the firm admin. There are no ethical walls and no private notes, tasks or conversations.
 - **Review** — who may review and approve; the author does not review their own work where another reviewer exists. A one-person firm may self-approve, marked as a self-review.
 - **Library** — admin publication, versions, access grants.
 - **Workflows** — Pydantic Graph definitions, versions, budgets, publication.
@@ -165,7 +165,7 @@ A review is the supervising lawyer's decision on a submitted version. An approva
 - **Backups** — last backup, verify, restore drill.
 - **Audit** — verify chain, export.
 
-Access changes are gated and audited. A wall is not a setting a user can remove.
+Access changes are audited. A firm admin assigns Matter access; a non-member sees no Matter.
 
 ---
 
@@ -175,9 +175,9 @@ One firm per installation; a setup token; the first lawyer becomes admin.
 
 1. Enter the setup token; create the admin account.
 2. Set retention and policy. The model policy is configured but Maverick is not switched on in the CRM stage.
-3. Invite lawyers and staff; assign firm roles. A solo firm can skip this and add people later.
+3. Invite lawyers, staff and interns; assign firm roles. A solo firm can skip this and add people later.
 4. Create the first client when there is one; open the first Matter with a note. Notes alone are enough.
-5. Add the Matter members and sections.
+5. The firm admin assigns Matter `edit` or `view` access; add the sections.
 6. Create tasks, assignments and events; import the first documents into the sections; use a conversation; submit the first piece of work for review and approve or return it.
 7. Run the first workflow, or ask Maverick with the Matter’s documents in scope, only after the CRM is working.
 
@@ -194,7 +194,7 @@ No product tour, no empty dashboard. The first screen is a Matter with a next st
 - A calendar that owns dates instead of projecting them.
 - A document editor that silently becomes the record.
 - A second editor engine for agent edits.
-- A private conversation, private note, private task or private trace shown to every Matter member, including by role.
+- An ethical wall, a conflict-check subsystem or a private-resource mode.
 - A save path that silently overwrites a newer version.
 - Real-time co-editing, shared cursors, presence or a live-session banner in V1.
 - A workspace section that becomes a second Matter, a permission boundary or a generic file manager.

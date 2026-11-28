@@ -33,6 +33,8 @@ in the document where they apply. Sources are cited inline where relevant.
 - CRM foundations first; the AI legal harness second.
 - One firm with multiple users; a client may have many Matters.
 - One shared Matter workspace; sequential document editing. No real-time co-editing in V1.
+- A firm admin has access to every Matter. A firm admin assigns Matter access to lawyers, staff and interns.
+- No ethical walls, no conflict-check subsystem and no private-resource rule. Matter resources are Matter-wide; restricted documents need a resource grant.
 - Self-hosted per firm; one installation serves one firm.
 - Human approval for commit, filing, send, grant, delete.
 - DOCX/PDF is the work product; chat is not a legal record.
@@ -41,6 +43,7 @@ in the document where they apply. Sources are cited inline where relevant.
 - One application-service layer; CLI, HTTP and agent tools call it.
 - No conflict-check subsystem; the matter-open gate records client and scope.
 - Euro-Office 9.3.8 is the editor. V1 runs the local editor and `x2t`; the server pack is installed but not started.
+- pgvector is part of the bundled PostgreSQL. Docker is a development convenience, never a product dependency.
 - No RabbitMQ, Erlang, Redis, Nextcloud or CommunityServer as part of the record path.
 - No hosted DocumentServer and no Docker dependency in V1.
 
@@ -56,10 +59,10 @@ in the document where they apply. Sources are cited inline where relevant.
 - Positions, evidence assessments, exhibit numbers and registry identity are append-only attributed records; status columns are derived.
 - Approval friction sits only on irreversible boundaries: commit, filing-ready, send, grant, delete. `doc_apply` is tracked and reversible and gets batch review. A gate is never weakened for speed.
 - Every agent-drafted document and filing set references the task or decision that authorised it.
-- Every workspace resource has one Matter, one owning module, a visibility rule and an audit event. A section is arrangement, not a second container.
+- Every workspace resource has one Matter, one owning module, one Matter access rule and an audit event. A section is arrangement, not a second container.
 - One edit lease per document; only the holder saves; a save is base-bound and a stale save is refused. No silent overwrite.
-- A private note, private task or private conversation is owner-only; a firm admin is not a Matter bypass.
-- Review is human and hash-bound; an agent cannot approve its own work or delete a resource.
+- The firm admin sees every Matter. Other users need an active Matter grant. A restricted document needs a resource grant, but the firm admin does not.
+- Review is human and hash-bound; a firm admin or a lawyer reviews, and an agent cannot approve its own work or delete a resource.
 - No data migration from a prior product: one baseline schema, forward-only numbered migrations before pilot data.
 - Prose does not enforce: boundaries, isolation, catalog parity and bundle evals are CI checks.
 - Installed is not running: the server pack is present on every client; V1 does not start it.
@@ -69,7 +72,7 @@ in the document where they apply. Sources are cited inline where relevant.
 
 ## Domain vocabulary
 
-Matter ≠ proceeding · client ≠ contact · hearing ≠ order · fact ≠ evidence · document ≠ version · authority ≠ citation · task ≠ deadline · assignment is a task's assignee and due date · submission is task + version + approval · review and approval are different · decision, approval and gate are different · a section is arrangement, not a workspace · an application nests inside a matter or proceeding and is never a sub-matter · the server is the shared-record spine; execution is stateless and local.
+Matter ≠ proceeding · client ≠ contact · hearing ≠ order · fact ≠ evidence · document ≠ version · authority ≠ citation · task ≠ deadline · assignment is a task's assignee and due date · submission is task + version + approval · review and approval are different · decision, approval and gate are different · a section is arrangement, not a workspace · an application nests inside a matter or proceeding and is never a sub-matter · the firm admin sees every Matter and assigns Matter access · the server is the shared-record spine; execution is stateless and local.
 
 Rejected entities: `action`, `assignment` as a separate entity, sub-matter, per-matter databases, a conflict-check subsystem, Workspace/Project.
 
@@ -77,7 +80,7 @@ Out of scope: time/billing, teams, client portal, multi-tenant SaaS, real-time c
 
 ## Matter management versus legal intelligence
 
-- **Matter management** is the Clio-shaped substrate: firm, people, clients, Matters, parties, sections, notes, tasks, assignments, events, documents and access. It works with notes alone.
+- **Matter management** is the Clio-shaped substrate: firm, people, clients, Matters, parties, sections, notes, tasks, assignments, events, documents and access. The firm hierarchy is admin, lawyer, staff and intern. It works with notes alone.
 - **Litigation management** is Proceedings, applications, hearings, orders, forum adapters and filings.
 - **Legal intelligence** is classification, corpus, case law, library, research, evidence, drafting and verification.
 - **Agent and automation** is runs, tools, browser and workflows.
@@ -89,8 +92,8 @@ Build the Matter-management substrate first, then litigation, legal intelligence
 - `0001_core.sql` is the appendix to the domain model. The domain model is the source; if they conflict, fix the SQL.
 - It targets PostgreSQL 17+ (`pgcrypto`, `citext`, `pg_trgm`, `pgvector`) and runs as the `maverick_owner` role.
 - Conventions: UUID keys, timestamptz, text + CHECK for stable sets, immutable tables reject UPDATE/DELETE, derived data separate and rebuildable.
-- `0002_rls_test.sql` seeds two Matters and proves isolation, walls, the application tree and the audit link.
-- If you change a schema file, re-run the pair and update the results in the architecture doc.
+- `0002_rls_test.sql` seeds two Matters and one firm admin; it proves Matter isolation, the firm-admin path, restricted-document child access, the application tree and the audit link.
+- The schema is proposed. It has not been executed on PostgreSQL 17.12 + pgvector 0.8.7. Run the pair and update the architecture doc before step 1.
 - Alembic is the runner: revision `0001` executes the baseline SQL; later revisions are numbered and forward-only; `downgrade` is not implemented; `alembic check` fails on drift.
 
 ## Three Pydantic libraries, three jobs

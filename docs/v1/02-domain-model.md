@@ -23,7 +23,7 @@ A Matter is complete without litigation management or legal intelligence.
 
 **User** — one human login and audit actor.
 
-**Membership** — a user's firm role: `admin`, `lawyer` or `staff`. Firm administration is not Matter access.
+**Membership** — a user's firm role: `admin`, `lawyer`, `staff` or `intern`. A firm admin has access to every Matter.
 
 **Contact** — one deduplicated person or organisation.
 
@@ -31,13 +31,15 @@ A Matter is complete without litigation management or legal intelligence.
 
 **Matter** — the engagement. The unit of confidentiality, work and the shared workspace. Title and note are enough to open it; the client is optional at intake.
 
-**Matter member** — a user's grant inside one Matter: `lead`, `editor`, `viewer` or `approver`. An intern is a staff or lawyer user with `editor` access, not a separate role. A supervising lawyer is a `lead` or `approver`.
+**Responsible lawyer** — the lawyer named on the Matter. The lawyer is a Matter `edit` member. The name is not a separate permission role; the firm admin assigns it.
+
+**Matter member** — a user's grant inside one Matter: `edit` or `view`. A firm admin assigns the grant. An intern is a firm `intern` with `edit` or `view` access. A supervising lawyer is a firm `lawyer` with `edit` access.
 
 **Section (workspace section)** — a named, ordered arrangement of documents inside one Matter. Its name is its heading. It is not a Workspace, not a Project and not a permission boundary. The baseline table is `folder`.
 
 **Heading** — the title of a section, or a heading inside a note or document. It is content or arrangement, not a separate record.
 
-**Assignment** — a task with an assignee and a due date. The assignor or a `lead` owns the due date; the assignee updates status and comments. It is not a separate entity.
+**Assignment** — a task with an assignee and a due date. The assignor or a Matter `edit` member owns the due date; the assignee updates status and comments. It is not a separate entity.
 
 **Event** — a meeting, hearing or deadline as scheduled. The calendar is a derived view; it does not own a second date.
 
@@ -123,10 +125,9 @@ A Matter is complete without litigation management or legal intelligence.
 - `session` — server-side login session. Owner: identity.
 - `device` — registered desktop. Owner: identity.
 - `execution_node` — desktop, server worker or shared node. Owner: identity.
-- `matter_member` — baseline Matter grant. Owner: access.
-- `ethical_wall` — explicit deny; always wins. Owner: access.
+- `matter_member` — Matter grant: `edit` or `view`. Owner: access.
 - `reuse_grant` — cross-Matter reuse. Owner: access.
-- `resource_grant` — narrows a document, conversation or task inside a Matter. Owner: access.
+- `resource_grant` — grants a restricted document inside a Matter. Owner: access.
 
 ### People
 
@@ -138,7 +139,7 @@ A Matter is complete without litigation management or legal intelligence.
 
 - `matter` — the engagement. Owner: matter.
 - `matter_relation` — Matter-to-Matter link. Owner: matter.
-- `note` — Matter-scoped note with private or Matter visibility; firm-wide notes are not used. Owner: matter.
+- `note` — Matter-scoped note, readable by every Matter member. Owner: matter.
 - `proceeding` — one legal process. Owner: proceedings. Its classification/detail fields carry the impugned order, originating proceeding, jurisdiction basis, governing date and a composable `detail` JSONB. There is no proceeding-relation table and no connected-proceeding graph.
 - `registry_event` — registered, transferred, renumbered, bench changed. Owner: proceedings.
 - `hearing` — dated occurrence. Owner: proceedings.
@@ -215,7 +216,7 @@ A Matter is complete without litigation management or legal intelligence.
 
 ### Execution and collaboration
 
-- `conversation` — private, shared or Matter-wide room. Owner: harness.
+- `conversation` — Matter-wide room. Owner: harness.
 - `message` — attributed turn. Owner: harness.
 - `agent_run` — one Maverick execution. Owner: harness.
 - `agent_event` — one step in a run. Owner: harness.
@@ -246,8 +247,6 @@ erDiagram
   CLIENT ||--o{ MATTER : instructs
   USER ||--o{ MATTER_MEMBER : granted
   MATTER ||--o{ MATTER_MEMBER : controls
-  USER ||--o{ ETHICAL_WALL : blocked
-  MATTER ||--o{ ETHICAL_WALL : blocks
   MATTER ||--o{ RESOURCE_GRANT : narrows
 
   MATTER ||--o{ PROCEEDING : contains
@@ -309,13 +308,13 @@ erDiagram
 
 **Section:** created → renamed/moved → deleted when empty. A section with documents or child sections is emptied or moved first; deletion is audited.
 
-**Note:** created → edited → deleted. Deletion is audited and blocked by a legal hold; visibility is private or Matter. There is no formal review state on the note itself.
+**Note:** created → edited → deleted. Deletion is audited and blocked by a legal hold; every Matter member reads the note. There is no formal review state on the note itself.
 
-**Task:** open → in_progress → blocked → done or cancelled. An assignment is the task's assignee and due date; the assignor or a `lead` changes the due date, not the assignee. A task under review stays in progress until the review is decided.
+**Task:** open → in_progress → blocked → done or cancelled. An assignment is the task's assignee and due date; the assignor or a Matter `edit` member changes the due date, not the assignee. A task under review stays in progress until the review is decided.
 
 **Event:** scheduled → held or cancelled. A deadline is proposed → confirmed → met, missed or waived; a hearing follows its proceeding. The calendar is derived.
 
-**Edit lease:** idle → opening → active → closing → closed, failed or revoked. One lease per document; an expiry closes the lease with a failure code and is audited. A save is accepted only while the lease is active and the base still matches.
+**Edit lease:** idle → opening → active → closing → closed, failed, revoked or expired. One lease per document; an expiry is audited. A save is accepted only while the lease is active and the base still matches.
 
 **Submission and review:** requested → in review → approved or returned. A submission is the task + submitted version + approval + annotations + notification; a return rejects the approval and reopens the task. The version survives.
 
@@ -363,10 +362,10 @@ erDiagram
 - Every agent-generated version and filing names the task or decision that authorised it.
 - A derived extraction pins the `document_text` hash; a re-run marks it stale.
 - An exhibit’s evidence and Proceeding belong to the same Matter.
-- A private note and private conversation are not readable by another Matter member, including a `lead` or `approver`; a private task is readable only by its creator and assignee; a private trace follows the conversation rule.
-- A firm admin who is not a Matter member reads no Matter content.
-- A resource grant never widens beyond the Matter or overrides a wall.
-- A restricted document needs a grant; a Matter document is member-readable.
+- A firm admin reads every Matter. A non-member reads no Matter content.
+- Every Matter member reads every note, task, conversation and message in the Matter. There is no private resource.
+- A resource grant never widens beyond the Matter.
+- A restricted document needs a grant; a Matter document is member-readable. The firm admin does not need the grant.
 - A section never changes the access of the documents in it; deleting a section never deletes a document.
 - An agent run uses only the launching user’s grants, intersected with the bundle.
 - One active edit lease per document; only the holder may save; a save from a lost lease is refused.
@@ -375,7 +374,7 @@ erDiagram
 - A proposal is base-hash-bound; a moved base makes it stale; apply is idempotent.
 - Every create, edit, submit, review, approve, archive and delete emits one audit event with the actor and subject.
 - A submission is bound to the submitted version hash; a new version makes the review stale.
-- A review is decided by a Matter `lead` or `approver`; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked as a self-review.
+- A review is decided by a firm admin or a lawyer with Matter `edit` access; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked as a self-review.
 - An agent cannot approve its own work, clear a legal gate or delete a resource.
 - A run is leased to one node; a stale run is suspended; an uncertain effect is marked.
 - A classification proposal does not change the canonical Matter/Proceeding until confirmed.
@@ -436,12 +435,12 @@ This is a later design task, not implementation. Run it in two stages.
 
 `docs/v1/schema/0001_core.sql` is the baseline DDL appendix. It is deliberately smaller than the model and is not the starting point. If the domain model and SQL conflict, fix the SQL. The RLS test is `0002_rls_test.sql`.
 
-The V1 baseline now includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task visibility, task_document, notifications, jobs, editing session/proposal and execution node. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the schema appendix; any later change is a numbered migration.
+The V1 baseline now includes the classification record, forum adapter, browser session/control lease, corpus instruments/versions/snapshots/provisions, judgments/versions/snapshots, library item/version/grant, research project/plan, workflow definition/version/run/step, resource grant, message, task_document, notifications, jobs, editing session/proposal and execution node. Proceeding appeal/SLP detail is on `proceeding`, not a separate relation table. The baseline is the schema appendix; any later change is a numbered migration.
 
-The CRM substrate is already in the baseline: `firm`, `user`, `membership`, `contact`, `client`, `matter`, `matter_member`, `note` with visibility, `task` with visibility, assignee and work kind, `appointment`, `folder`, `document` and `document_version`, `conversation` with visibility, `message`, `resource_grant`, `editing_session`, `approval` and the audit chain. A **section** is a `folder` row; this update introduces no second container table.
+The CRM substrate is in the baseline: `firm`, `user`, `membership`, `contact`, `client`, `matter`, `matter_member` with `edit`/`view`, `note`, `task` with assignee and work kind, `appointment` with a required Matter, `folder`, `document` and `document_version`, `conversation`, `message`, `resource_grant` for restricted documents, `editing_session`, `approval` and the audit chain. A **section** is a `folder` row; there is no second container table.
 
-Policy gaps are scheduled, not silently accepted. The baseline `note` policy is Matter-wide rather than honouring `note.visibility`; the baseline `task` policy lets a firm admin read a private task; the baseline `agent_run` policy lets a firm admin read a private trace; and the baseline `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` policies are Matter-wide rather than following a restricted document. The shared-workspace and document steps narrow all of them before private notes, private tasks, private traces or restricted-document child rows are exposed. Private and restricted resources do not ship on application checks alone.
+The baseline enforces the simplified model. A firm admin reads every Matter. A non-member reads no Matter. A Matter member reads every Matter resource; there are no private notes, private tasks, private conversations or private traces. Restricted-document grants cover `document`, `document_version`, `document_text`, `document_anchor`, `annotation`, `document_relation` and `document_chunk` through `has_document_access`, `has_document_version_access` and `has_document_relation_access`.
 
-Baseline details are retained or migrated explicitly. `editing_session` keeps `checkpoint_sha256`/`checkpoint_at` and `document_version.source` keeps `editor_recovery` for the deferred shared session; V1 writes neither. The `editing_session` status set is `opening`, `active`, `closing`, `closed`, `failed` or `revoked`; an expiry is a close with a failure code, not a separate status. `appointment.matter_id` is nullable in the baseline; the V1 service creates appointments inside a Matter, and the step 5 migration makes the column not null. The baseline has no idempotency key on `document_version` or `editing_session` and no takeover-request columns; step 4 must add them before save retries or takeover are claimed.
+The edit lease has `opening`, `active`, `closing`, `closed`, `failed`, `revoked` and `expired`, a save idempotency key on `document_version`, and takeover-request/approval fields. There is no checkpoint and no `editor_recovery` source. The audit event has four actor types, trigger, run, initiating user, approval status and approver as columns.
 
 Legacy tables `authority`, `authority_version`, `rule_instrument`, `rule_snapshot`, `playbook`, `playbook_run` and `step_run` remain in the baseline for continuity. V1 modules do not write them; `corpus`, `case_law`, `rules` and `workflow_*` are the live path. A later cleanup migration may drop them once no old reader remains.

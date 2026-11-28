@@ -15,7 +15,7 @@ Application services own the use cases. A route, CLI command, tool or agent neve
 - Every service method takes a `MatterScope` where the record is Matter-bound and an `Actor` (the initiating human).
 - A service calls another module through a public contract, never through its repository or tables.
 - A service write emits an audit event.
-- A service read of a Matter checks matter membership, walls and resource grants.
+- A service read checks firm-admin access or Matter membership, and a restricted-document grant.
 - A service write checks the expected revision (or document base version/hash) and never applies last-write-wins.
 - A transaction belongs to the use case, not to a route or a tool.
 - Unknown is a result; a service does not return the closest match.
@@ -29,7 +29,7 @@ These are the service groups the CRM implements first. The names are contracts, 
 | Group | Service surface |
 |---|---|
 | `identity` | Firm bootstrap, user invite, membership role, session and device. |
-| `access` | Matter member add/revoke, wall raise/revoke, resource grant, the one `access.can(actor, resource, action)` policy. |
+| `access` | Matter member add/revoke with `edit` or `view`, restricted-document resource grant, the one `access.can(actor, resource, action)` policy. |
 | `contacts` | Contact and client create/update; a client may own many Matters. |
 | `matter` | Matter open/update/close, party add, note create/edit/archive. |
 | `work` | Task create/assign/update/complete, deadline create/confirm, appointment create/update/cancel. |
@@ -44,7 +44,7 @@ These are the service groups the CRM implements first. The names are contracts, 
 - A write takes an opaque `expected_revision` (a document takes `base_version_id` and `base_hash`). A mismatch is `RESOURCE_STALE`; the service never applies last-write-wins.
 - Every mutation declares `patch` or `replace`. A replace requires a precondition (revision, version id or timestamp); a missing declaration fails the operation check.
 - A write takes an idempotency key. A replay returns the prior result.
-- A write emits an audit event in the same transaction. A read checks Matter membership, the wall and the resource grant.
+- A write emits an audit event in the same transaction. A read checks firm-admin access or Matter membership, and the restricted-document grant.
 - The contract is Pydantic at the boundary. Domain entities stay plain Python.
 - The future harness calls these services through `ToolGateway`; it does not get a parallel API, a direct repository or a wider scope. `human_only` operations (approve, commit, filing, send, grant, delete) are never model tools.
 - The first harness-facing reads are `matter.get`, `workspace.list`, `document.get`, `document.history`, `note.list`, `task.list`, `event.list`, `conversation.list` and `research.get`. The first proposals are `note.create`, `task.create` and `document.propose`. Submission is human; approval is human-only.
@@ -149,17 +149,17 @@ There are no separate chat, drafting, research or intake agents. Different work 
 
 The context package is a record, not a transient string. It is persisted before the model is called.
 
-- Start with `MatterScope`: Matter, user, grant, wall, bundle.
+- Start with `MatterScope`: Matter, user, Matter access, bundle.
 - Add system policy, bundle instructions, skill text, task/step instruction.
 - Add the Matter spine: client, parties, proceedings, sections, next dates, open tasks, open reviews, open decisions and open gates.
 - Add only the records the bundle/skill/task declares.
 - Add explicit references (document version, note, task, event, conversation, research result) after their own access check.
-- Apply the initiating user's visibility. A private note, private task or private conversation is excluded unless that user owns it; a restricted document is excluded without a grant.
+- Apply the initiating user's Matter access. A Matter member reads every note, task and conversation in the Matter. A restricted document is excluded without a grant, except for the firm admin.
 - Add matter-scoped retrieval only; no global index.
 - Fit by priority; record truncation and exclusions.
 - Persist the manifest: ids, versions, hashes, Matter, inclusion/exclusion reason and token counts.
 
-**Private conversations.** A private conversation is included only for its owner. A shared conversation only for a participant. A Matter conversation for members, subject to walls. A message link to a document is not a grant.
+**Conversations.** A conversation is Matter-wide. Every Matter member reads it. A message link to a document is not a grant.
 
 **Resumed runs.** Replay the exact package, then revalidate pins. A superseded document version, stale rule or changed approval is marked `stale`/`unconfirmed`; do not silently rebuild.
 
@@ -178,7 +178,7 @@ The context package is a record, not a transient string. It is persisted before 
 - A changed subject makes the approval stale.
 - An agent cannot approve its own work.
 
-**Review and approval are different.** A review is the supervising lawyer's decision on submitted work; an approval is the hash-bound permission for one legal operation. A submission composes a task, a document version, an approval, annotations and a notification. A return rejects the approval, reopens the task and leaves the version intact; the next attempt is a new version. Only a Matter `lead` or `approver` decides; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked in the audit.
+**Review and approval are different.** A review is the supervising lawyer's decision on submitted work; an approval is the hash-bound permission for one legal operation. A submission composes a task, a document version, an approval, annotations and a notification. A return rejects the approval, reopens the task and leaves the version intact; the next attempt is a new version. Only a firm admin or a lawyer with Matter `edit` access decides; where another eligible reviewer exists, the author does not decide their own submission. A one-person firm may self-approve, marked in the audit.
 
 **Gate kinds:** Matter open, document approve, filing ready, rule publish, access grant, deletion. A gate blocks until a human clears it against frozen evidence.
 
@@ -215,7 +215,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 
 **Core commands:**
 
-`firm init` · `user invite|disable` · `client create|update` · `contact create|update` · `matter create|member add|member revoke|wall raise|close` · `section create|rename|move|delete` · `note create|edit|delete` · `task create|assign|update|complete` · `event create|update|cancel` · `conversation create|share` · `message post` · `file upload|get` · `document get|submit|compare|restore` · `document session open|save|close|revoke` · `document propose|apply|accept|reject|comment` · `review submit|comment|decide` · `context select` · `classification propose|confirm` · `forum adapter sync` · `browser open|handoff` · `research submit` · `corpus ingest` · `case-law search` · `library publish|grant` · `research studio create|run` · `workflow create|publish|run` · `run start|status|cancel` · `node register|status|revoke` · `audit verify|export`.
+`firm init` · `user invite|disable` · `client create|update` · `contact create|update` · `matter create|member add|member revoke|close` · `section create|rename|move|delete` · `note create|edit|delete` · `task create|assign|update|complete` · `event create|update|cancel` · `conversation create|share` · `message post` · `file upload|get` · `document get|submit|compare|restore` · `document session open|save|close|revoke` · `document propose|apply|accept|reject|comment` · `review submit|comment|decide` · `context select` · `classification propose|confirm` · `forum adapter sync` · `browser open|handoff` · `research submit` · `corpus ingest` · `case-law search` · `library publish|grant` · `research studio create|run` · `workflow create|publish|run` · `run start|status|cancel` · `node register|status|revoke` · `audit verify|export`.
 
 **Shared errors:** `MATTER_ACCESS_DENIED`, `RESOURCE_ACCESS_DENIED`, `RESOURCE_STALE`, `DOC_STALE_BASE`, `DOC_STALE_TARGET`, `DOC_SESSION_ACTIVE`, `DOC_SESSION_REVOKED`, `EDIT_LEASE_HELD`, `PROPOSAL_STALE`, `PROPOSAL_CONFLICT`, `REVIEW_STALE`, `RUN_LEASE_LOST`, `RUN_ACCESS_REVOKED`, `EFFECT_UNCERTAIN`, `APPROVAL_STALE`, `IDEMPOTENT_REPLAY`.
 
@@ -227,7 +227,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 
 - One database, one baseline schema, one owner per table.
 - Every legal row carries `matter_id` and RLS.
-- The app role has no `BYPASSRLS`; the table owner is forced through RLS.
+- The app role has no `BYPASSRLS`; every app query is subject to the policy. The migration owner reads `document` without FORCE for the access function, to prevent function recursion.
 - `app.user_id` is set per transaction with `set_config(..., true)`.
 - Immutable: document versions, audit events, published rules.
 - Derived: text, embeddings, read models; rebuildable.
@@ -286,7 +286,7 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Append-only, hash-chained legal/security events.
 - Every workspace mutation emits an event, not only document versions and legal records: section, note, task, assignment, event, conversation, message, document, review, approval and deletion.
 - Who, what, when, which Matter, which subject, why, previous/next revision or hash, evidence reference.
-- Performer type is `user`, `agent` or `system`; trigger is `direct`, `delegation` or `schedule`. The baseline `audit_event` stores the performer, action, subject, Matter and a JSONB payload; the trigger, run, initiating user, approval status and approver travel in that payload until a later migration promotes them to columns.
+- Performer type is `user`, `agent`, `system` or `service`. A service is a named connector or MCP; `actor_ref` names it. Trigger is `direct`, `delegation` or `schedule`. The audit event stores the performer, trigger, run, initiating user, approval status and approver as columns. The JSONB payload carries evidence and detail.
 - A document event names the version and hash. A review event names the submitted hash and decision. A deletion names what was removed or archived.
 - Immutable; app role can append via function and read, not update/delete.
 - Retention: life of Matter + 7 years; legal hold blocks deletion.
@@ -302,10 +302,9 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - Argon2id passwords (`argon2-cffi`); TOTP (`pyotp`); breached-password check.
 - Sessions are opaque 256-bit tokens stored hashed in `session`; revocation deletes the row. JWTs are only for short-lived document URLs and the signed local-editor config.
 - Step-up auth for commit, filing-ready, send, grant, delete.
-- Firm roles `admin`, `lawyer`, `staff`; Matter access `lead`, `editor`, `viewer`, `approver`. An intern is a staff/lawyer user with Matter `editor` access, not a new role.
-- Firm administration is not Matter access. A firm admin who is not a Matter member reads no Matter content.
-- Private notes are owner-only; private tasks are creator and assignee; private conversations are owner-only; restricted documents need a grant. No `lead` or `approver` reads private content by role.
-- The baseline `note`, `task`, `agent_run` and restricted-document child policies are broader than that rule; the workspace and document steps narrow them before private notes, private tasks, private traces or restricted-document child rows are exposed.
+- Firm roles `admin`, `lawyer`, `staff`, `intern`; Matter access `edit` or `view`. A firm admin reads every Matter and assigns Matter access. A non-member reads no Matter.
+- Every Matter member reads every note, task, conversation and message in the Matter. There are no private resources. Restricted documents need a grant, and the grant covers every related document row. A firm admin does not need the grant.
+- The baseline enforces this model. There is no ethical wall and no conflict-check subsystem.
 - Agent inherits the launching user, intersected with the bundle; no wider access.
 - A shared conversation never widens document access.
 - V1 has no hosted DocumentServer, no Docker dependency and no real-time co-editing; the editor is local and saves through the API.
@@ -322,11 +321,11 @@ Typer is the business CLI. `clai` is Pydantic AI’s chat client, not the busine
 - A service write has an audit event; a broken fixture fails the check.
 - A workspace write without an audit event fails the check, whether the resource is a document, note, task, event, conversation or section.
 - A cross-Matter API/search/embedding/export returns nothing, for every workspace resource type.
-- A wall hides the Matter everywhere.
-- A firm admin without Matter membership reads no Matter content.
-- A private note and private conversation are invisible to every other Matter member, including a `lead` or `approver`; a private task is visible only to its creator and assignee.
+- A firm admin reads every Matter; a non-member reads no Matter.
+- A Matter member reads every note, task, conversation and message in the Matter.
+- A restricted document and its version, text, anchors, annotations, relations and chunks are invisible without a grant, except for the firm admin.
 - A tool outside the bundle is denied.
-- An agent acts as the initiating user; an intern's agent cannot read a restricted document or widen a private task.
+- An agent acts as the initiating user; an intern's agent cannot bypass a restricted-document grant.
 - A stale approval rejects a commit.
 - A prompt injection cannot call a human-only action; approval and deletion stay human.
 - A document version is immutable; a changed subject resets approval/readiness.

@@ -143,7 +143,7 @@ and assert a failure that names the rule.
 | D2 | Agent surface offers a human-only action | Tool catalog | allowlist + operation metadata | Mark human-only; do not register a tool | Fixture registering `approve` as a tool fails |
 | D3 | Two copies of an allowlist | Capabilities | generated subset + drift test | Declare once; derive subsets | Hand-edited copy fails |
 | D4 | Unreadable policy allows | Policy loader | deny-by-default test | Fail closed with a visible error | Corrupt policy fixture returns deny |
-| D5 | Private resource readable by a peer or by firm admin role | Access, services, RLS | negative fixtures per resource | Owner-only (assignee for a private task); RLS re-check | A peer or non-member admin read returns nothing |
+| D5 | Restricted document readable by a Matter member without a grant | Access, services, RLS | negative fixtures for document and every child row | Resource grant; RLS re-check | A non-granted member read returns nothing |
 | D6 | Section move changes access | Documents, access | negative fixture | Section is arrangement only | A moved document keeps its grants and restrictions |
 
 ### E. Records and operations
@@ -161,7 +161,7 @@ and assert a failure that names the rule.
 | E9 | Workspace write without audit | Services | integration test on the audit chain | Append the event in the transaction | Note/task/event/section write without an event fails |
 | E10 | Stale revision applied | Services | revision-token test | Compare inside the transaction; `RESOURCE_STALE` | A note or task write from an old token fails |
 | E11 | Stale document base creates a version | Documents | edit-lease and base-hash test | Lock, verify, refuse `DOC_STALE_BASE` | Two saves from the same base create one version |
-| E12 | Review decided by the author where another reviewer exists | Approvals | role and actor test | `lead`/`approver`, not the author | Author decision is refused |
+| E12 | Review decided by the author where another reviewer exists | Approvals | role and actor test | Firm admin or lawyer with Matter `edit`, not the author | Author decision is refused |
 | E13 | Retry duplicates a version, message or approval | Services | idempotency-key test | Return the prior result | Double invoke creates one record |
 
 ---
@@ -232,7 +232,9 @@ Distinct types, not one universal model.
   `AuditEventId`. Each is a frozen `RootModel[UUID]`, so a `MatterId` cannot be passed where a
   `ForumId` is expected.
 - **States:** `OcrState`, `VerificationState`, `DraftState`, `ApprovalState`, `GateState`, `RunState`,
-  `EditLeaseState` and `Visibility` as `Literal` unions. Invalid transitions are unrepresentable.
+  `EditLeaseState` and `MatterAccess` as `Literal` unions. Invalid transitions are unrepresentable.
+- **Audit:** `ActorType` (`user`, `agent`, `system`, `service`) and `TriggerType`
+  (`direct`, `delegation`, `schedule`) as `Literal` unions.
 - **Revisions:** `RevisionToken` is opaque to the caller and bound to the resource; a write carries
   the token it read. Documents additionally carry `DocumentVersionId` and a base hash.
 - **Classification:** a discriminated union by `kind` (`Subject`, `Forum`, `Jurisdiction`,
